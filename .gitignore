@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.egg-info/
+*.py[cod]
+build/
+dist/
+
+# Generated audit snapshots are intentionally reviewable only when explicitly added.
+artifacts/phase1/generated-*.json

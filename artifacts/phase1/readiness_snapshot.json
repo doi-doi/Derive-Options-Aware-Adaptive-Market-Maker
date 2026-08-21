@@ -1,0 +1,172 @@
+{
+  "observed_at_utc": "2026-08-21T02:28:37Z",
+  "phase": 1,
+  "scope": "read_only_discovery",
+  "local_infrastructure": {
+    "condor_dashboard_http_status": 200,
+    "hummingbot_api_docs_http_status": 200,
+    "hummingbot_api_openapi_http_status": 200,
+    "hummingbot_package_version": "20260729",
+    "connector_count": 76,
+    "candle_connector_count": 29,
+    "derive_connectors": [
+      "derive",
+      "derive_perpetual",
+      "derive_perpetual_testnet",
+      "derive_testnet"
+    ],
+    "derive_candle_connectors": [],
+    "deribit_connectors": [],
+    "testnet_live_checks": {
+      "btc_usdc_order_book": true,
+      "funding_info": true,
+      "collateral_state": true,
+      "positions": true,
+      "active_orders": true
+    },
+    "supported_order_types": [
+      "LIMIT",
+      "LIMIT_MAKER",
+      "MARKET"
+    ]
+  },
+  "production_history": {
+    "BTC": {
+      "index_daily": {
+        "rows": 990,
+        "earliest": "2023-12-06T00:00:00Z",
+        "latest": "2026-08-21T00:00:00Z"
+      },
+      "perp_daily": {
+        "returned_rows": 2425,
+        "nonzero_volume_rows": 982,
+        "earliest_usable": "2023-12-14T00:00:00Z",
+        "latest_usable": "2026-08-21T00:00:00Z"
+      },
+      "perp_trade_history": {
+        "raw_rows": 1933694,
+        "earliest": "2024-01-11T20:28:44.144000Z",
+        "latest": "2026-08-21T02:18:35.202000Z"
+      },
+      "option_trade_history": {
+        "raw_rows": 294207,
+        "earliest": "2024-01-11T18:08:14.516000Z",
+        "latest": "2026-08-21T02:21:32.719000Z"
+      },
+      "funding_1h_last_30d": {
+        "rows": 721,
+        "earliest": "2026-07-22T02:00:00Z",
+        "latest": "2026-08-21T02:00:00Z"
+      },
+      "active_option_instruments": 674,
+      "non_expired_option_instruments": 890,
+      "all_option_instruments": 45944,
+      "option_settlements": {
+        "raw_rows": 72870,
+        "unique_contract_settlements": 14633,
+        "earliest_expiry": "2023-12-13T08:00:00Z",
+        "latest_expiry": "2026-08-20T08:00:00Z"
+      }
+    },
+    "ETH": {
+      "index_daily": {
+        "rows": 990,
+        "earliest": "2023-12-06T00:00:00Z",
+        "latest": "2026-08-21T00:00:00Z"
+      },
+      "perp_daily": {
+        "returned_rows": 2425,
+        "nonzero_volume_rows": 961,
+        "earliest_usable": "2023-12-14T00:00:00Z",
+        "latest_usable": "2026-08-21T00:00:00Z"
+      },
+      "perp_trade_history": {
+        "raw_rows": 3450998,
+        "earliest": "2024-01-11T20:22:18.630000Z",
+        "latest": "2026-08-21T02:16:56.557000Z"
+      },
+      "option_trade_history": {
+        "raw_rows": 784606,
+        "earliest": "2024-01-11T21:40:42.630000Z",
+        "latest": "2026-08-21T02:21:45.803000Z"
+      },
+      "funding_1h_last_30d": {
+        "rows": 721,
+        "earliest": "2026-07-22T02:00:00Z",
+        "latest": "2026-08-21T02:00:00Z"
+      },
+      "active_option_instruments": 656,
+      "non_expired_option_instruments": 852,
+      "all_option_instruments": 41268,
+      "option_settlements": {
+        "raw_rows": 157499,
+        "unique_contract_settlements": 20920,
+        "earliest_expiry": "2023-12-08T08:00:00Z",
+        "latest_expiry": "2026-08-20T08:00:00Z"
+      }
+    },
+    "global": {
+      "option_settlement_raw_rows": 243252,
+      "liquidation_raw_events": 228,
+      "liquidation_auctions_returned": 68,
+      "interest_rate_rows": 7382,
+      "interest_rate_earliest": "2023-12-15T11:37:05Z",
+      "maker_program_count": 75
+    }
+  },
+  "testnet_last_30d": {
+    "BTC": {
+      "hourly_perp_bars": 720,
+      "nonzero_volume_bars": 49,
+      "raw_perp_trade_rows": 264,
+      "funding_rows": 716
+    },
+    "ETH": {
+      "hourly_perp_bars": 720,
+      "nonzero_volume_bars": 46,
+      "raw_perp_trade_rows": 374,
+      "funding_rows": 708
+    }
+  },
+  "live_websocket_verified": {
+    "ticker_slim_perp": true,
+    "ticker_slim_option": true,
+    "perp_orderbook": true,
+    "option_pricing_fields": [
+      "ai",
+      "bi",
+      "d",
+      "df",
+      "f",
+      "g",
+      "i",
+      "m",
+      "r",
+      "t",
+      "v"
+    ],
+    "stats_fields": [
+      "c",
+      "h",
+      "l",
+      "n",
+      "oi",
+      "p",
+      "pr",
+      "v"
+    ]
+  },
+  "backtester": {
+    "queue_position": false,
+    "partial_fills": false,
+    "latency": false,
+    "funding_accrual": false,
+    "derive_fee_schedule": false,
+    "flat_trade_cost_only": true,
+    "grid_touch_full_fill": true,
+    "order_executor_close_cross_full_fill": true,
+    "conclusion": "controller_smoke_test_only"
+  },
+  "decision": "READY_WITH_GAPS",
+  "next_experiment": "B0 conservative BTC inventory-aware baseline; approval required"
+}
