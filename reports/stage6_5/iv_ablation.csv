@@ -1,0 +1,13 @@
+metric,basis,rv_only,iv_aware,delta_iv_minus_rv
+volatility_score,frame_mean,1.015603470327364,1.0114383340005342,-0.004165136326829799
+average_grid_width,frame_mean,0.011595003566481465,0.011348465360035065,-0.0002465382064464009
+defensive_time_pct,frame_percentage,14.189693801344285,14.115011202389843,-0.07468259895444262
+entry_fills,entry_fills,18,21,3.0
+cycles,completed_grid_cycles,14,17,3.0
+realized_pnl_after_fees,net_realized_pnl,6.09257,7.83999,1.74742
+unrealized_pnl,unrealized_pnl_end,-31.37378,-31.32626,0.047519999999998674
+total_pnl,total_pnl,-25.28121,-23.48627,1.7949400000000004
+max_drawdown,maximum_drawdown,41.40466,40.77134,-0.6333199999999977
+max_inventory,maximum_absolute_inventory_base,0.0436,0.0436,0.0
+markout_30s_bps,markout,-2.3451240771294986,-1.1996646331579035,1.145459443971595
+cancel_create_ratio,cancel_create_ratio,0.9754601226993865,0.9696969696969697,-0.00576315300241681

@@ -10,7 +10,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "doi-doi"}]
-dependencies = []
+dependencies = [
+  "pydantic>=2.0,<3",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -26,6 +28,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

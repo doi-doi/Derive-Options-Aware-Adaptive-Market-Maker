@@ -1,0 +1,13 @@
+fee_assumption,maker_fee_bps,strategy,fill_model,fees,net_realized_pnl,total_pnl,maximum_drawdown
+hypothetical maker fee/rebate,-1,iv_adaptive_grid,conservative_cross_through,-3.555723242,11.395713242,-19.930546758000002,39.936995806
+hypothetical maker fee/rebate,-1,rv_only_adaptive_grid,conservative_cross_through,-3.05201507,9.14458507,-22.22919493,40.648501926
+hypothetical maker fee/rebate,-1,static_geometric_grid,conservative_cross_through,-2.31722048,7.85427048,4.37947048,11.649150722
+hypothetical maker fee/rebate,0,iv_adaptive_grid,conservative_cross_through,0.0,7.83999,-23.48627,40.77134
+hypothetical maker fee/rebate,0,rv_only_adaptive_grid,conservative_cross_through,0.0,6.09257,-25.28121,41.40466
+hypothetical maker fee/rebate,0,static_geometric_grid,conservative_cross_through,0.0,5.53705,2.0622499999999997,12.01867
+hypothetical maker fee/rebate,1,iv_adaptive_grid,conservative_cross_through,3.555723242,4.284266758,-27.041993242,41.605684194
+hypothetical maker fee/rebate,1,rv_only_adaptive_grid,conservative_cross_through,3.05201507,3.0405549300000003,-28.33322507,42.160818074
+hypothetical maker fee/rebate,1,static_geometric_grid,conservative_cross_through,2.31722048,3.21982952,-0.25497048000000033,12.416401158
+hypothetical maker fee/rebate,2,iv_adaptive_grid,conservative_cross_through,7.111446484,0.7285435160000002,-30.597716484000003,42.440028388
+hypothetical maker fee/rebate,2,rv_only_adaptive_grid,conservative_cross_through,6.10403014,-0.011460139999999619,-31.38524014,43.009959948
+hypothetical maker fee/rebate,2,static_geometric_grid,conservative_cross_through,4.63444096,0.9026090399999998,-2.5721909600000004,12.878932316

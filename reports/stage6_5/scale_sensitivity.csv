@@ -1,0 +1,7 @@
+notional_basis,order_scale,strategy,fill_model,entry_creates,entry_fills,minimum_order_blocks,fill_eligibility_pct,skipped_order_pct,total_pnl,maximum_drawdown,maximum_inventory_base,average_deployed_notional,maximum_deployed_notional,maximum_deployed_capital_pct
+native_stage4_theoretical,1.0,iv_adaptive_grid,conservative_cross_through,0,0,37242,0.0,100.0,0.0,0.0,0.0,0.0,0.0,0.0
+native_stage4_theoretical,1.0,rv_only_adaptive_grid,conservative_cross_through,0,0,36282,0.0,100.0,0.0,0.0,0.0,0.0,0.0,0.0
+native_stage4_theoretical,1.0,static_geometric_grid,conservative_cross_through,0,0,40160,0.0,100.0,0.0,0.0,0.0,0.0,0.0,0.0
+testnet_minimum_normalized,9.30,iv_adaptive_grid,conservative_cross_through,759,21,2023,2.766798418972332,72.71746944644141,-23.48627,40.77134,0.0436,4066.5084116878265,5615.96452,56.15964520000001
+testnet_minimum_normalized,9.30,rv_only_adaptive_grid,conservative_cross_through,815,18,2265,2.208588957055215,73.53896103896103,-25.28121,41.40466,0.0436,3958.154892678616,5616.3735,56.163734999999996
+testnet_minimum_normalized,9.30,static_geometric_grid,conservative_cross_through,687,13,0,1.8922852983988356,0.0,2.0622499999999997,12.01867,0.0361,4482.4235816629325,5562.258,55.62258

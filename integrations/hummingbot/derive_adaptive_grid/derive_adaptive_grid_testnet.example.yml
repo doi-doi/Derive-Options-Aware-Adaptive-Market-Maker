@@ -1,0 +1,46 @@
+# Stage 5 safe first-run configuration.
+# The controller package is copied into the Hummingbot API controllers tree;
+# paths below are inside the bot container.
+id: derive_adaptive_grid_testnet
+controller_name: derive_adaptive_grid
+controller_type: market_making
+
+connector_name: derive_perpetual_testnet
+trading_pair: BTC-USDC
+leverage: 1
+position_mode: ONEWAY
+allow_mainnet_trading: false
+
+# Dry run is the default and must be verified before enabling testnet orders.
+execution_enabled: false
+execution_max_levels_per_side: 1
+testnet_order_scale: 0.05
+post_only: true
+
+grid_plan_path: /home/hummingbot/data/derive_grid_plans.jsonl
+execution_journal_path: /home/hummingbot/data/derive_execution_events.jsonl
+replay_existing_plan: true
+
+max_total_position_notional: 1000
+max_side_position_notional: 1000
+max_active_grid_levels: 2
+max_active_executors: 2
+minimum_order_lifetime_seconds: 30
+maximum_order_lifetime_seconds: 600
+refresh_price_tolerance_bps: 5
+refresh_amount_tolerance_pct: 0.05
+max_consecutive_order_errors: 3
+order_error_pause_seconds: 60
+stale_plan_timeout_seconds: 30
+collateral_safety_buffer_pct: 0.10
+cancel_orders_on_pause: true
+cancel_orders_on_shutdown: true
+manual_kill_switch: false
+emergency_close_positions_on_pause: false
+
+# Native PositionExecutor exits.  Adjacent grid spacing is used by default.
+take_profit_mode: adjacent_grid
+take_profit_pct: 0.001
+take_profit_step_multiplier: 1
+stop_loss_pct: null
+time_limit_seconds: null

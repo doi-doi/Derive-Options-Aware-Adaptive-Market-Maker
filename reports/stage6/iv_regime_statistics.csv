@@ -1,0 +1,9 @@
+average_effective_quote_amount,average_grid_width_pct,average_level_count_total,entry_fills,exit_fills,filled_quote_volume,gross_pnl,iv_regime,mean_holding_time_seconds,mean_markout_30s_bps,mode_distribution,net_cycle_pnl,records,source
+908.4181313598519,0.011102239566099369,9.221708294788776,,,,,normal,,,"{""defensive"":446,""long_bias"":16,""normal"":2631,""pause"":73,""short_bias"":77}",,3243,behavior
+0.0,0.0,0,,,,,unknown,,,"{""pause"":1}",,1,behavior
+,,,12,10,20396.5436,4.71385,normal,1315.3479999303818,-3.6444063373148006,,4.71385,,replay:static_geometric_grid:conservative_cross_through
+,,,12,10,20396.5436,4.71385,normal,1315.3479999303818,-3.6444063373148006,,4.71385,,replay:static_geometric_grid:touch_optimistic
+,,,17,12,27712.38321,5.39561,normal,1285.756499985854,-2.4009202907969533,,5.39561,,replay:rv_only_adaptive_grid:conservative_cross_through
+,,,17,12,27712.38321,5.39561,normal,1285.756499985854,-2.4009202907969533,,5.39561,,replay:rv_only_adaptive_grid:touch_optimistic
+,,,21,16,34621.18973,7.45642,normal,806.7776249945164,-1.1996646331579035,,7.45642,,replay:iv_adaptive_grid:conservative_cross_through
+,,,19,14,30842.58808,6.59871,normal,1112.4366428511482,-1.2757187105306291,,6.59871,,replay:iv_adaptive_grid:touch_optimistic

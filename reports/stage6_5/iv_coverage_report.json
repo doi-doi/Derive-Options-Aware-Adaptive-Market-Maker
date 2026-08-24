@@ -1,0 +1,100 @@
+{
+  "asof_carried_iv_coverage": {
+    "age_seconds": {
+      "count": 4016,
+      "maximum": 0.0,
+      "mean": 0.0,
+      "median": 0.0,
+      "minimum": 0.0,
+      "p90": 0.0,
+      "p95": 0.0,
+      "stdev": 0.0
+    },
+    "coverage_pct": 99.97510580034852,
+    "finite_iv_frames": 4016,
+    "frames": 4017
+  },
+  "common_window_coverage": {
+    "available_records": 4016,
+    "coverage_pct": 99.97510580034852,
+    "missing_records": 1,
+    "records": 4017
+  },
+  "definitions": {
+    "carried_iv_age": "plan frame timestamp minus the selected state timestamp",
+    "fresh_iv": "finite state ATM IV with carried age <= threshold",
+    "missing_iv": "state ATM IV is unavailable, regardless of RV fallback",
+    "rv_fallback": "missing or stale IV while realized_volatility_ratio is finite",
+    "snapshot_atm_iv": "finite snapshot.atm_iv value",
+    "stale_iv": "finite state ATM IV with carried age > threshold",
+    "state_atm_iv": "finite as-of state.atm_iv value"
+  },
+  "freshness_sensitivity": {
+    "120": {
+      "effective_source_counts": {
+        "fresh_iv": 4016,
+        "missing_iv_no_rv": 1
+      },
+      "fresh_iv_frames": 4016,
+      "missing_iv_frames": 1,
+      "rv_fallback_frames": 0,
+      "stale_iv_frames": 0,
+      "threshold_seconds": 120.0
+    },
+    "30": {
+      "effective_source_counts": {
+        "fresh_iv": 4016,
+        "missing_iv_no_rv": 1
+      },
+      "fresh_iv_frames": 4016,
+      "missing_iv_frames": 1,
+      "rv_fallback_frames": 0,
+      "stale_iv_frames": 0,
+      "threshold_seconds": 30.0
+    },
+    "300": {
+      "effective_source_counts": {
+        "fresh_iv": 4016,
+        "missing_iv_no_rv": 1
+      },
+      "fresh_iv_frames": 4016,
+      "missing_iv_frames": 1,
+      "rv_fallback_frames": 0,
+      "stale_iv_frames": 0,
+      "threshold_seconds": 300.0
+    },
+    "60": {
+      "effective_source_counts": {
+        "fresh_iv": 4016,
+        "missing_iv_no_rv": 1
+      },
+      "fresh_iv_frames": 4016,
+      "missing_iv_frames": 1,
+      "rv_fallback_frames": 0,
+      "stale_iv_frames": 0,
+      "threshold_seconds": 60.0
+    }
+  },
+  "raw_option_data_age_seconds": {
+    "count": 5611,
+    "maximum": 9.742762088775635,
+    "mean": 3.8446712343902263,
+    "median": 3.7312889099121094,
+    "minimum": 0.0,
+    "p90": 7.74332594871521,
+    "p95": 8.254884839057922,
+    "stdev": 2.755162542242232
+  },
+  "snapshot_coverage": {
+    "available_records": 5611,
+    "coverage_pct": 32.87438481368643,
+    "missing_records": 11457,
+    "records": 17068
+  },
+  "state_coverage": {
+    "available_records": 5573,
+    "coverage_pct": 93.36572290165857,
+    "missing_records": 396,
+    "records": 5969
+  }
+}
