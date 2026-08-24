@@ -17,13 +17,16 @@ LEGACY_TESTNET_DOMAIN_SEPARATOR = (
 LEGACY_TESTNET_TRADE_MODULE_ADDRESS = "0x87F2863866D85E3192a35A73b388BD625D83f2be"
 
 
+def _is_testnet_domain(domain: object) -> bool:
+    """Keep the legacy adapter limited to the installed testnet domain."""
+
+    return str(domain or "").strip().lower() == "derive_perpetual_testnet"
+
+
 def install_derive_testnet_signing_compatibility() -> None:
     """Use the legacy testnet trade module for authenticated order actions."""
 
-    from hummingbot.connector.derivative.derive_perpetual import (
-        derive_perpetual_auth,
-        derive_perpetual_constants,
-    )
+    from hummingbot.connector.derivative.derive_perpetual import derive_perpetual_constants
     from hummingbot.connector.derivative.derive_perpetual.derive_perpetual_auth import (
         DerivePerpetualAuth,
     )
@@ -32,9 +35,6 @@ def install_derive_testnet_signing_compatibility() -> None:
         get_action_nonce,
     )
     from hummingbot.connector.other.derive_common_utils import SignedAction, TradeModuleData
-
-    derive_perpetual_constants.TESTNET_DOMAIN_SEPARATOR = LEGACY_TESTNET_DOMAIN_SEPARATOR
-    derive_perpetual_auth.CONSTANTS.TESTNET_DOMAIN_SEPARATOR = LEGACY_TESTNET_DOMAIN_SEPARATOR
 
     if getattr(DerivePerpetualAuth, "_codex_testnet_signing_patch_applied", False):
         return
@@ -45,7 +45,7 @@ def install_derive_testnet_signing_compatibility() -> None:
         return format(Decimal(value).quantize(Decimal("1e-18")), "f")
 
     def _patched_sign(self: DerivePerpetualAuth, params):
-        if "testnet" not in self._domain:
+        if not _is_testnet_domain(self._domain):
             return original_sign(self, params)
 
         action = SignedAction(
@@ -104,7 +104,7 @@ def install_derive_testnet_post_only_compatibility() -> None:
             path_url = args[0]
         data = kwargs.get("data")
         if (
-            "testnet" in self.domain
+            _is_testnet_domain(self.domain)
             and path_url == derive_perpetual_constants.CREATE_ORDER_URL
             and isinstance(data, dict)
             and data.get("type") == "order"

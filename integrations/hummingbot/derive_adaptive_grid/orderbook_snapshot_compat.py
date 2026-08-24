@@ -14,6 +14,14 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+SUPPORTED_DERIVE_DOMAINS = frozenset({"derive_perpetual", "derive_perpetual_testnet"})
+
+
+def is_supported_derive_domain(domain: object) -> bool:
+    """The race fix is safe for both known connector environments only."""
+
+    return str(domain or "").strip().lower() in SUPPORTED_DERIVE_DOMAINS
+
 
 async def _cached_snapshot_payload(data_source: Any, trading_pair: str) -> dict[str, Any] | None:
     cached_snapshot = getattr(data_source, "_snapshot_messages", {}).get(trading_pair)
@@ -86,6 +94,8 @@ def install_derive_orderbook_snapshot_compatibility() -> None:
     original_request = DerivePerpetualAPIOrderBookDataSource._request_order_book_snapshot
 
     async def patched_request(data_source: Any, trading_pair: str) -> dict[str, Any]:
+        if not is_supported_derive_domain(getattr(data_source, "_domain", None)):
+            return await original_request(data_source, trading_pair)
         return await _request_with_cache_fallback(data_source, trading_pair, original_request)
 
     DerivePerpetualAPIOrderBookDataSource._request_order_book_snapshot = patched_request

@@ -1,10 +1,11 @@
-"""Hummingbot V2 controller for Stage 5 Derive testnet execution.
+"""Hummingbot V2 controller for controlled Derive grid execution.
 
 This adapter consumes the append-only Stage 4 ``GridPlan`` JSONL boundary and
 turns validated levels into one native ``PositionExecutor`` per level.  It
 does not calculate market signals or grid parameters.  The default is a
 testnet-gated dry run: reconciliation, quantization, and risk checks run, but
 no executor action is sent until ``execution_enabled`` is explicitly true.
+Mainnet additionally requires the separate canary gates.
 """
 
 from __future__ import annotations
@@ -46,6 +47,14 @@ from .execution_logic import (
     TradingRuleView,
     parse_grid_plan,
     reconcile_grid_plan,
+)
+from .mainnet_canary import (
+    MAINNET_CONNECTOR_NAME,
+    CanaryRiskLimits,
+    check_environment_consistency,
+    environment_for_connector,
+    mainnet_canary_blockers,
+    normalize_environment,
 )
 
 logger = logging.getLogger(__name__)
@@ -153,7 +162,12 @@ class JsonlPlanTailer:
 
 
 class DeriveAdaptiveGridConfig(ControllerConfigBase):
-    """Execution-only configuration for one Derive BTC perpetual pair."""
+    """Execution-only configuration for one Derive BTC perpetual pair.
+
+    The default remains the existing testnet dry run.  Mainnet is accepted
+    only as a separate, explicitly populated canary configuration and remains
+    fail-closed until the read-only audit and acknowledgement gates agree.
+    """
 
     controller_type: str = "market_making"
     controller_name: str = "derive_adaptive_grid"
@@ -163,6 +177,11 @@ class DeriveAdaptiveGridConfig(ControllerConfigBase):
     trading_pair: str = "BTC-USDC"
     leverage: int = Field(default=1, ge=1, le=20)
     position_mode: PositionMode = PositionMode.ONEWAY
+    environment: str = "testnet"
+    market_environment: str | None = None
+    options_environment: str | None = None
+    account_environment: str | None = None
+    execution_environment: str | None = None
     allow_mainnet_trading: bool = False
 
     # Stage 4 boundary.  The bot container receives this through its data
@@ -176,18 +195,33 @@ class DeriveAdaptiveGridConfig(ControllerConfigBase):
     execution_max_levels_per_side: int = Field(
         default=1, ge=1, le=100, json_schema_extra={"is_updatable": True}
     )
-    testnet_order_scale: Decimal = Field(
+    testnet_order_scale: Decimal | None = Field(
         default=Decimal("0.05"), gt=0, json_schema_extra={"is_updatable": True}
+    )
+    mainnet_canary_order_scale: Decimal | None = Field(
+        default=None, gt=0, json_schema_extra={"is_updatable": True}
     )
     post_only: bool = True
 
     # Hard inventory and executor limits.
-    max_total_position_notional: Decimal = Field(
+    max_total_position_notional: Decimal | None = Field(
         default=Decimal("1000"), gt=0, json_schema_extra={"is_updatable": True}
     )
-    max_side_position_notional: Decimal = Field(
+    max_side_position_notional: Decimal | None = Field(
         default=Decimal("1000"), gt=0, json_schema_extra={"is_updatable": True}
     )
+    mainnet_canary_max_order_notional: Decimal | None = Field(
+        default=None, gt=0, json_schema_extra={"is_updatable": True}
+    )
+    mainnet_canary_max_total_position_notional: Decimal | None = Field(
+        default=None, gt=0, json_schema_extra={"is_updatable": True}
+    )
+    mainnet_canary_max_loss_quote: Decimal | None = Field(
+        default=None, gt=0, json_schema_extra={"is_updatable": True}
+    )
+    mainnet_environment_verified: bool = False
+    mainnet_account_state_verified: bool = False
+    mainnet_canary_ack: str | None = None
     max_active_grid_levels: int = Field(
         default=2, ge=1, le=200, json_schema_extra={"is_updatable": True}
     )
@@ -233,19 +267,74 @@ class DeriveAdaptiveGridConfig(ControllerConfigBase):
     time_limit_seconds: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
-    def validate_testnet_contract(self) -> DeriveAdaptiveGridConfig:
-        if self.allow_mainnet_trading:
-            raise ValueError("Stage 5 is testnet-only; allow_mainnet_trading must remain false")
-        if self.connector_name != "derive_perpetual_testnet":
-            raise ValueError("Execution blocked: connector_name must be derive_perpetual_testnet")
+    def validate_environment_contract(self) -> DeriveAdaptiveGridConfig:
         if self.trading_pair != "BTC-USDC":
-            raise ValueError("Stage 5 currently supports only BTC-USDC")
+            raise ValueError("Adaptive Grid currently supports only BTC-USDC")
         if not self.post_only:
-            raise ValueError("Stage 5 requires post_only=true")
+            raise ValueError("Adaptive Grid requires post_only=true")
         if self.maximum_order_lifetime_seconds < self.minimum_order_lifetime_seconds:
             raise ValueError("maximum_order_lifetime_seconds must not be below minimum lifetime")
         if self.take_profit_mode not in {"adjacent_grid", "fixed"}:
             raise ValueError("take_profit_mode must be adjacent_grid or fixed")
+        configured_environment = normalize_environment(self.environment)
+        if self.connector_name == "derive_perpetual_testnet":
+            if configured_environment != "testnet":
+                raise ValueError("testnet connector requires environment=testnet")
+            if self.allow_mainnet_trading:
+                raise ValueError("testnet configuration cannot allow mainnet trading")
+            if self.testnet_order_scale is None:
+                raise ValueError("testnet_order_scale must be configured for testnet")
+            return self
+        if self.connector_name != MAINNET_CONNECTOR_NAME:
+            raise ValueError("Execution blocked: connector_name must be a supported Derive domain")
+        if configured_environment != "mainnet":
+            raise ValueError("mainnet connector requires environment=mainnet")
+        if self.leverage != 1:
+            raise ValueError("mainnet canary requires leverage=1")
+        if self.execution_max_levels_per_side != 1:
+            raise ValueError("mainnet canary requires exactly one execution level per side")
+        if self.max_active_grid_levels > 2 or self.max_active_executors > 2:
+            raise ValueError("mainnet canary caps must not exceed two active levels/executors")
+        if self.emergency_close_positions_on_pause:
+            raise ValueError("mainnet canary must not force-close positions on pause")
+        if self.testnet_order_scale is not None:
+            raise ValueError("mainnet configuration must not reuse testnet_order_scale")
+        environments = (
+            self.market_environment,
+            self.options_environment,
+            self.account_environment,
+            self.execution_environment,
+        )
+        if any(normalize_environment(value) != "mainnet" for value in environments):
+            raise ValueError(
+                "mainnet requires all market/options/account/execution environments to be mainnet"
+            )
+        risk_limits = CanaryRiskLimits(
+            max_order_notional=self.mainnet_canary_max_order_notional,
+            max_total_position_notional=self.mainnet_canary_max_total_position_notional,
+            max_loss_quote=self.mainnet_canary_max_loss_quote,
+        )
+        if self.execution_enabled or self.allow_mainnet_trading:
+            blockers = mainnet_canary_blockers(
+                mainnet_environment_verified=self.mainnet_environment_verified,
+                environment_consistent=check_environment_consistency(
+                    required_environment="mainnet",
+                    market_connector=self.connector_name,
+                    market_domain=self.connector_name,
+                    options_environment=self.options_environment,
+                    account_environment=self.account_environment,
+                    execution_environment=self.execution_environment,
+                ).consistent,
+                allow_mainnet_trading=self.allow_mainnet_trading,
+                execution_enabled=self.execution_enabled,
+                acknowledgement=self.mainnet_canary_ack,
+                risk_limits=risk_limits,
+                order_scale=self.mainnet_canary_order_scale,
+                account_state_verified=self.mainnet_account_state_verified,
+                stop_loss_pct=self.stop_loss_pct,
+            )
+            if blockers:
+                raise ValueError("mainnet canary gates are incomplete: " + ", ".join(blockers))
         return self
 
     def update_markets(self, markets: MarketDict) -> MarketDict:
@@ -279,17 +368,31 @@ class DeriveAdaptiveGrid(ControllerBase):
         self._filled_quote_volume = Decimal("0")
         self._order_error_pause_until = 0.0
         self._created_success_ids: set[str] = set()
+        self._mainnet_initial_account_checked = False
+        self._mainnet_initial_account_blocker = ""
 
     def _policy(self, now: float = 0.0) -> ExecutionPolicy:
         error_pause_active = (
             self._consecutive_order_errors >= self.config.max_consecutive_order_errors
             and now < self._order_error_pause_until
         )
+        is_mainnet = self.config.connector_name == MAINNET_CONNECTOR_NAME
+        order_scale = (
+            self.config.mainnet_canary_order_scale
+            if is_mainnet
+            else self.config.testnet_order_scale
+        )
+        total_limit = (
+            self.config.mainnet_canary_max_total_position_notional
+            if is_mainnet
+            else self.config.max_total_position_notional
+        )
+        side_limit = total_limit if is_mainnet else self.config.max_side_position_notional
         return ExecutionPolicy(
             execution_max_levels_per_side=self.config.execution_max_levels_per_side,
-            testnet_order_scale=self.config.testnet_order_scale,
-            max_total_position_notional=self.config.max_total_position_notional,
-            max_side_position_notional=self.config.max_side_position_notional,
+            testnet_order_scale=order_scale,
+            max_total_position_notional=total_limit,
+            max_side_position_notional=side_limit,
             max_active_grid_levels=self.config.max_active_grid_levels,
             max_active_executors=self.config.max_active_executors,
             minimum_order_lifetime_seconds=self.config.minimum_order_lifetime_seconds,
@@ -309,6 +412,15 @@ class DeriveAdaptiveGrid(ControllerBase):
             stop_loss_pct=self.config.stop_loss_pct,
             time_limit_seconds=self.config.time_limit_seconds,
             forced_pause_reason="order_error_pause" if error_pause_active else "",
+            environment=normalize_environment(self.config.environment),
+            mainnet_canary_authorized=(
+                self.config.mainnet_environment_verified
+                and self.config.allow_mainnet_trading
+                and self.config.execution_enabled
+                and self.config.mainnet_canary_ack is not None
+            ),
+            mainnet_canary_max_order_notional=self.config.mainnet_canary_max_order_notional,
+            mainnet_canary_max_loss_quote=self.config.mainnet_canary_max_loss_quote,
         )
 
     def _connector(self):
@@ -346,6 +458,11 @@ class DeriveAdaptiveGrid(ControllerBase):
         provider_ready = bool(getattr(self.market_data_provider, "ready", False))
         connector = None
         testnet_verified = False
+        configured_environment = normalize_environment(self.config.environment)
+        environment = configured_environment
+        environment_verified = False
+        environment_consistent = configured_environment != "mainnet"
+        canary_authorized = False
         connector_ready = False
         rules = None
         available = None
@@ -357,10 +474,47 @@ class DeriveAdaptiveGrid(ControllerBase):
             connector = self._connector()
             connector_name = str(getattr(connector, "name", self.config.connector_name))
             domain = str(getattr(connector, "domain", ""))
-            testnet_verified = connector_name == "derive_perpetual_testnet" and (
-                domain == "derive_perpetual_testnet"
+            runtime_environment = environment_for_connector(connector_name, domain)
+            environment_verified = runtime_environment == configured_environment
+            testnet_verified = (
+                runtime_environment == "testnet" and configured_environment == "testnet"
             )
-            if not testnet_verified:
+            if configured_environment == "mainnet":
+                consistency = check_environment_consistency(
+                    required_environment="mainnet",
+                    market_connector=connector_name,
+                    market_domain=domain,
+                    options_environment=self.config.options_environment,
+                    account_environment=self.config.account_environment,
+                    execution_environment=self.config.execution_environment,
+                )
+                environment_consistent = consistency.consistent
+                canary_authorized = not mainnet_canary_blockers(
+                    mainnet_environment_verified=environment_verified,
+                    environment_consistent=environment_consistent,
+                    allow_mainnet_trading=self.config.allow_mainnet_trading,
+                    execution_enabled=self.config.execution_enabled,
+                    acknowledgement=self.config.mainnet_canary_ack,
+                    risk_limits=CanaryRiskLimits(
+                        max_order_notional=self.config.mainnet_canary_max_order_notional,
+                        max_total_position_notional=(
+                            self.config.mainnet_canary_max_total_position_notional
+                        ),
+                        max_loss_quote=self.config.mainnet_canary_max_loss_quote,
+                    ),
+                    order_scale=self.config.mainnet_canary_order_scale,
+                    account_state_verified=self.config.mainnet_account_state_verified,
+                    stop_loss_pct=self.config.stop_loss_pct,
+                )
+                if not environment_verified:
+                    reason = (
+                        "Execution blocked: Derive mainnet connector/domain could not be verified."
+                    )
+                elif not environment_consistent:
+                    reason = "Execution blocked: mainnet environments are inconsistent."
+                elif not canary_authorized:
+                    reason = "Execution blocked: mainnet canary approval gates are not satisfied."
+            elif not testnet_verified:
                 reason = "Execution blocked: Derive testnet could not be verified."
             connector_ready = bool(getattr(connector, "ready", False))
             if not connector_ready and not reason:
@@ -381,6 +535,21 @@ class DeriveAdaptiveGrid(ControllerBase):
             )
             mid = ((best_bid + best_ask) / Decimal("2")) if best_bid and best_ask else Decimal("0")
             position_notional = self._read_position_notional(connector, mid)
+            if configured_environment == "mainnet" and not self._mainnet_initial_account_checked:
+                self._mainnet_initial_account_checked = True
+                open_orders = getattr(connector, "in_flight_orders", None)
+                if open_orders is None:
+                    self._mainnet_initial_account_blocker = "open_order_state_unavailable"
+                elif open_orders:
+                    self._mainnet_initial_account_blocker = (
+                        "existing BTC orders require explicit acknowledgement"
+                    )
+                elif position_notional != Decimal("0"):
+                    self._mainnet_initial_account_blocker = (
+                        "existing BTC position requires explicit acknowledgement"
+                    )
+            if self._mainnet_initial_account_blocker and not reason:
+                reason = f"Execution blocked: {self._mainnet_initial_account_blocker}."
             available = _decimal(
                 self.market_data_provider.get_available_balance(
                     self.config.connector_name, self.config.trading_pair.split("-")[1]
@@ -451,6 +620,10 @@ class DeriveAdaptiveGrid(ControllerBase):
             available_collateral=available or Decimal("0"),
             trading_rules=trading_rules,
             reason=reason,
+            environment=environment,
+            environment_verified=environment_verified,
+            environment_consistent=environment_consistent,
+            mainnet_canary_authorized=canary_authorized,
         )
 
     def _active_levels(self) -> list[ActiveLevel]:
@@ -551,6 +724,10 @@ class DeriveAdaptiveGrid(ControllerBase):
                 best_bid=None,
                 best_ask=None,
                 reason=f"reconciliation_error:{type(exc).__name__}",
+                environment=normalize_environment(self.config.environment),
+                environment_verified=False,
+                environment_consistent=False,
+                mainnet_canary_authorized=False,
             )
             result = ReconciliationResult(
                 pause_reason=health.reason,
@@ -610,6 +787,10 @@ class DeriveAdaptiveGrid(ControllerBase):
             "blocked_level_reasons": [blocked.reason for blocked in result.blocked],
             "consecutive_errors": self._consecutive_order_errors,
             "testnet_verified": health.testnet_verified,
+            "environment": health.environment,
+            "environment_verified": health.environment_verified,
+            "environment_consistent": health.environment_consistent,
+            "mainnet_canary_authorized": health.mainnet_canary_authorized,
             "pause_reason": result.pause_reason,
             "execution_enabled": self.config.execution_enabled,
             "orders_created": self._orders_created,
@@ -904,10 +1085,12 @@ class DeriveAdaptiveGrid(ControllerBase):
             ),
             (
                 f"Errors: {data.get('consecutive_errors')}  "
-                f"Testnet: {'YES' if data.get('testnet_verified') else 'NO'}"
+                f"Environment: {data.get('environment', 'unknown')}  "
+                f"Verified: {'YES' if data.get('environment_verified') else 'NO'}"
             ),
             (
                 f"Execution enabled: {data.get('execution_enabled')}  "
+                f"Canary authorized: {data.get('mainnet_canary_authorized')}  "
                 f"Pause: {data.get('pause_reason') or 'none'}"
             ),
             "╚════════════════════════════════════════╝",

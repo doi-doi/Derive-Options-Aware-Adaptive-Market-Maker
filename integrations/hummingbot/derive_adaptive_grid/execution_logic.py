@@ -113,12 +113,26 @@ class RuntimeHealth:
     available_collateral: Decimal = ZERO
     trading_rules: TradingRuleView | None = None
     reason: str = ""
+    environment: str = "testnet"
+    environment_verified: bool = False
+    environment_consistent: bool = True
+    mainnet_canary_authorized: bool = False
 
     @property
     def ready_for_new_entries(self) -> bool:
+        environment_ready = (
+            self.testnet_verified
+            if self.environment == "testnet"
+            else (
+                self.environment == "mainnet"
+                and self.environment_verified
+                and self.environment_consistent
+                and self.mainnet_canary_authorized
+            )
+        )
         return all(
             (
-                self.testnet_verified,
+                environment_ready,
                 self.connector_ready,
                 self.market_data_ready,
                 self.trading_rules_available,
@@ -140,9 +154,9 @@ class ExecutionPolicy:
     """Execution-only controls; Stage 4 strategy parameters stay upstream."""
 
     execution_max_levels_per_side: int = 1
-    testnet_order_scale: Decimal = Decimal("0.05")
-    max_total_position_notional: Decimal = Decimal("1000")
-    max_side_position_notional: Decimal = Decimal("1000")
+    testnet_order_scale: Decimal | None = Decimal("0.05")
+    max_total_position_notional: Decimal | None = Decimal("1000")
+    max_side_position_notional: Decimal | None = Decimal("1000")
     max_active_grid_levels: int = 2
     max_active_executors: int = 2
     minimum_order_lifetime_seconds: float = 30.0
@@ -162,16 +176,31 @@ class ExecutionPolicy:
     stop_loss_pct: Decimal | None = None
     time_limit_seconds: int | None = None
     forced_pause_reason: str = ""
+    environment: str = "testnet"
+    mainnet_canary_authorized: bool = False
+    mainnet_canary_max_order_notional: Decimal | None = None
+    mainnet_canary_max_loss_quote: Decimal | None = None
 
     def __post_init__(self) -> None:
         if self.execution_max_levels_per_side < 1:
             raise ValueError("execution_max_levels_per_side must be positive")
-        if self.testnet_order_scale <= ZERO:
-            raise ValueError("testnet_order_scale must be positive")
-        if self.max_total_position_notional <= ZERO:
-            raise ValueError("max_total_position_notional must be positive")
-        if self.max_side_position_notional <= ZERO:
-            raise ValueError("max_side_position_notional must be positive")
+        if self.environment == "mainnet":
+            for name, value in (
+                ("mainnet order scale", self.testnet_order_scale),
+                ("max_total_position_notional", self.max_total_position_notional),
+                ("max_side_position_notional", self.max_side_position_notional),
+                ("mainnet_canary_max_order_notional", self.mainnet_canary_max_order_notional),
+                ("mainnet_canary_max_loss_quote", self.mainnet_canary_max_loss_quote),
+            ):
+                if value is not None and value <= ZERO:
+                    raise ValueError(f"{name} must be positive when configured")
+        else:
+            if self.testnet_order_scale is None or self.testnet_order_scale <= ZERO:
+                raise ValueError("testnet_order_scale must be positive")
+            if self.max_total_position_notional is None or self.max_total_position_notional <= ZERO:
+                raise ValueError("max_total_position_notional must be positive")
+            if self.max_side_position_notional is None or self.max_side_position_notional <= ZERO:
+                raise ValueError("max_side_position_notional must be positive")
         if self.max_active_grid_levels < 1 or self.max_active_executors < 1:
             raise ValueError("active executor limits must be positive")
         if self.leverage <= ZERO:
@@ -385,6 +414,8 @@ def quantize_level(
 
     if not policy.post_only:
         return None, "post-only execution is required"
+    if policy.testnet_order_scale is None:
+        return None, "mainnet canary order scale is not configured"
     scaled_quote = level.quote_amount * policy.testnet_order_scale
     if scaled_quote <= ZERO:
         return None, "scaled quote amount is zero"
@@ -480,6 +511,17 @@ def _pause_reason(
         return "GridPlan PAUSE", age
     if policy.forced_pause_reason:
         return policy.forced_pause_reason, age
+    if policy.environment == "mainnet":
+        if policy.mainnet_canary_max_loss_quote is None:
+            return "mainnet canary loss budget is not configured", age
+        if policy.stop_loss_pct is None or policy.stop_loss_pct <= ZERO:
+            return "mainnet canary loss control is not configured", age
+        if (
+            policy.max_total_position_notional is None
+            or policy.max_total_position_notional * policy.stop_loss_pct
+            > policy.mainnet_canary_max_loss_quote
+        ):
+            return "mainnet canary loss budget is below configured exposure", age
     if not health.ready_for_new_entries:
         return health.reason or "connector/account health unavailable", age
     return "", age
@@ -659,7 +701,10 @@ def reconcile_grid_plan(
         total_exposure = (
             current_long + current_short + pending_buy + pending_sell + desired.quote_notional
         )
-        if side_exposure > policy.max_side_position_notional:
+        if (
+            policy.max_side_position_notional is None
+            or side_exposure > policy.max_side_position_notional
+        ):
             result.blocked.append(
                 BlockedLevel(
                     desired.level_id,
@@ -669,7 +714,10 @@ def reconcile_grid_plan(
                 )
             )
             continue
-        if total_exposure > policy.max_total_position_notional:
+        if (
+            policy.max_total_position_notional is None
+            or total_exposure > policy.max_total_position_notional
+        ):
             result.blocked.append(
                 BlockedLevel(
                     desired.level_id,
@@ -685,6 +733,22 @@ def reconcile_grid_plan(
                 BlockedLevel(
                     desired.level_id,
                     "insufficient collateral after safety buffer",
+                    desired.side,
+                    desired.quote_amount,
+                )
+            )
+            continue
+        if (
+            policy.environment == "mainnet"
+            and (
+                policy.mainnet_canary_max_order_notional is None
+                or desired.quote_notional > policy.mainnet_canary_max_order_notional
+            )
+        ):
+            result.blocked.append(
+                BlockedLevel(
+                    desired.level_id,
+                    "mainnet canary order notional limit is missing or exceeded",
                     desired.side,
                     desired.quote_amount,
                 )
