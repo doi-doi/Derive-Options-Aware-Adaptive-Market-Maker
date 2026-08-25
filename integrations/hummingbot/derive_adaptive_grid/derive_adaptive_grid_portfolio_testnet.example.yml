@@ -1,0 +1,71 @@
+# BTC/HYPE portfolio controller — testnet dry-run template.
+# Execution stays disabled until a separate, explicit canary rollout.
+id: derive_adaptive_grid_portfolio_testnet
+controller_name: derive_adaptive_grid_portfolio
+controller_type: market_making
+
+connector_name: derive_perpetual_testnet
+trading_pair: BTC-USDC
+trading_pairs:
+  - BTC-USDC
+  - HYPE-USDC
+environment: testnet
+market_environment: testnet
+options_environment: testnet
+account_environment: testnet
+execution_environment: testnet
+leverage: 1
+position_mode: ONEWAY
+allow_mainnet_trading: false
+
+execution_enabled: false
+execution_max_levels_per_side: 1
+post_only: true
+testnet_order_scales_by_pair:
+  BTC-USDC: 10
+  HYPE-USDC: 10
+
+grid_plan_path: /home/hummingbot/data/derive_grid_plans.jsonl
+execution_journal_path: /home/hummingbot/data/derive_execution_events.jsonl
+replay_existing_plan: true
+
+pair_max_total_position_notional:
+  BTC-USDC: 350
+  HYPE-USDC: 350
+pair_max_side_position_notional:
+  BTC-USDC: 250
+  HYPE-USDC: 250
+pair_max_active_executors: 2
+pair_max_active_grid_levels: 2
+
+portfolio_max_gross_notional: 700
+portfolio_soft_beta_exposure: 450
+portfolio_hard_beta_exposure: 650
+portfolio_max_long_beta_exposure: 650
+portfolio_max_short_beta_exposure: 650
+portfolio_per_asset_max_position_notional: 400
+portfolio_max_active_executors: 4
+portfolio_collateral_safety_buffer_pct: 0.20
+portfolio_betas:
+  BTC-USDC: 1
+  HYPE-USDC: 1
+
+minimum_order_lifetime_seconds: 30
+minimum_replace_interval_seconds: 0
+maximum_order_lifetime_seconds: 600
+refresh_price_tolerance_bps: 5
+refresh_amount_tolerance_pct: 0.05
+max_consecutive_order_errors: 3
+order_error_pause_seconds: 60
+stale_plan_timeout_seconds: 30
+collateral_safety_buffer_pct: 0.10
+cancel_orders_on_pause: true
+cancel_orders_on_shutdown: true
+manual_kill_switch: false
+emergency_close_positions_on_pause: false
+
+take_profit_mode: adjacent_grid
+take_profit_pct: 0.001
+take_profit_step_multiplier: 1
+stop_loss_pct: null
+time_limit_seconds: null
