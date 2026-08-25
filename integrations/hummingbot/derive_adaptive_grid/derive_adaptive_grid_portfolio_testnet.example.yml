@@ -22,28 +22,30 @@ execution_enabled: false
 execution_max_levels_per_side: 1
 post_only: true
 testnet_order_scales_by_pair:
-  BTC-USDC: 10
-  HYPE-USDC: 10
+  # Minimum scales for the current Derive testnet rules and plan prices:
+  # BTC 0.01 base minimum, HYPE 10 base minimum.
+  BTC-USDC: 7.95
+  HYPE-USDC: 8.3
 
 grid_plan_path: /home/hummingbot/data/derive_grid_plans.jsonl
 execution_journal_path: /home/hummingbot/data/derive_execution_events.jsonl
 replay_existing_plan: true
 
 pair_max_total_position_notional:
-  BTC-USDC: 350
-  HYPE-USDC: 350
+  BTC-USDC: 1800
+  HYPE-USDC: 1800
 pair_max_side_position_notional:
-  BTC-USDC: 250
-  HYPE-USDC: 250
+  BTC-USDC: 900
+  HYPE-USDC: 900
 pair_max_active_executors: 2
 pair_max_active_grid_levels: 2
 
-portfolio_max_gross_notional: 700
-portfolio_soft_beta_exposure: 450
-portfolio_hard_beta_exposure: 650
-portfolio_max_long_beta_exposure: 650
-portfolio_max_short_beta_exposure: 650
-portfolio_per_asset_max_position_notional: 400
+portfolio_max_gross_notional: 1800
+portfolio_soft_beta_exposure: 1600
+portfolio_hard_beta_exposure: 2000
+portfolio_max_long_beta_exposure: 2000
+portfolio_max_short_beta_exposure: 2000
+portfolio_per_asset_max_position_notional: 1800
 portfolio_max_active_executors: 4
 portfolio_collateral_safety_buffer_pct: 0.20
 portfolio_betas:

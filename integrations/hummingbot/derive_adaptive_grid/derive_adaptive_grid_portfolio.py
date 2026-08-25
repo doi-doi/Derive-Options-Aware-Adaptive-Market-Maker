@@ -279,7 +279,6 @@ class DeriveAdaptiveGridPortfolio(ControllerBase):
             stop_loss_pct=self.config.stop_loss_pct,
             time_limit_seconds=self.config.time_limit_seconds,
             forced_pause_reason="order_error_pause" if error_pause_active else "",
-            environment="testnet",
         )
 
     def _read_position_notional(
@@ -314,9 +313,6 @@ class DeriveAdaptiveGridPortfolio(ControllerBase):
             best_bid=None,
             best_ask=None,
             reason=reason,
-            environment="testnet",
-            environment_verified=False,
-            environment_consistent=False,
         )
 
     def _read_health(self, pair: str) -> RuntimeHealth:
@@ -419,9 +415,6 @@ class DeriveAdaptiveGridPortfolio(ControllerBase):
             available_collateral=available or Decimal("0"),
             trading_rules=trading_rules,
             reason=reason,
-            environment="testnet",
-            environment_verified=testnet_verified,
-            environment_consistent=testnet_verified,
         )
 
     def _executor_plan_mode(self, executor_id: str) -> str | None:
