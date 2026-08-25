@@ -78,7 +78,7 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
     # The portfolio controller uses ``trading_pairs`` everywhere internally.
     trading_pair: str = "BTC-USDC"
     trading_pairs: tuple[str, ...] = BTC_HYPE_TRADING_PAIRS
-    leverage: int = Field(default=1, ge=1, le=20)
+    leverage: int = Field(default=1, ge=1, le=10)
     position_mode: PositionMode = PositionMode.ONEWAY
     environment: str = "testnet"
     market_environment: str = "testnet"
@@ -189,8 +189,8 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
             raise ValueError("all BTC/HYPE portfolio environments must be testnet")
         if self.allow_mainnet_trading:
             raise ValueError("BTC/HYPE portfolio execution cannot allow mainnet trading")
-        if self.leverage != 1:
-            raise ValueError("BTC/HYPE portfolio rollout requires leverage=1")
+        if self.leverage > 10:
+            raise ValueError("BTC/HYPE portfolio rollout supports at most leverage=10")
         if not self.post_only:
             raise ValueError("BTC/HYPE portfolio execution requires post_only=true")
         if self.maximum_order_lifetime_seconds < self.minimum_order_lifetime_seconds:

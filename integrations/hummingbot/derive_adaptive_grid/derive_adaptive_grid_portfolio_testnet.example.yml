@@ -14,7 +14,8 @@ market_environment: testnet
 options_environment: testnet
 account_environment: testnet
 execution_environment: testnet
-leverage: 1
+# Maximum effective Derive standard-margin leverage for perpetuals.
+leverage: 10
 position_mode: ONEWAY
 allow_mainnet_trading: false
 
