@@ -1,4 +1,4 @@
-"""Hummingbot controller for the BTC-USDC/HYPE-USDC Derive basket.
+"""Hummingbot controller for a configurable Derive perpetual basket.
 
 This controller is deliberately separate from the proven single-pair
 ``derive_adaptive_grid`` adapter.  It consumes the same Stage 4 JSONL stream,
@@ -45,7 +45,7 @@ from .execution_logic import (
     parse_grid_plan,
     reconcile_grid_plan,
 )
-from .portfolio_config import BTC_HYPE_TRADING_PAIRS, validate_btc_hype_pairs
+from .portfolio_config import DEFAULT_TRADING_PAIRS, validate_trading_pairs
 from .portfolio_execution import (
     PortfolioExecutionPolicy,
     PortfolioRiskDecision,
@@ -67,7 +67,7 @@ def _as_decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
 
 
 class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
-    """Fail-closed configuration for exactly BTC-USDC and HYPE-USDC."""
+    """Fail-closed configuration for a configurable Derive pair universe."""
 
     controller_type: str = "market_making"
     controller_name: str = "derive_adaptive_grid_portfolio"
@@ -77,7 +77,7 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
     # Retained for compatibility with tooling that expects a single-pair field.
     # The portfolio controller uses ``trading_pairs`` everywhere internally.
     trading_pair: str = "BTC-USDC"
-    trading_pairs: tuple[str, ...] = BTC_HYPE_TRADING_PAIRS
+    trading_pairs: tuple[str, ...] = DEFAULT_TRADING_PAIRS
     leverage: int = Field(default=1, ge=1, le=10)
     position_mode: PositionMode = PositionMode.ONEWAY
     environment: str = "testnet"
@@ -98,23 +98,23 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
     post_only: bool = True
     testnet_order_scales_by_pair: dict[str, Decimal] = Field(
         default_factory=lambda: {
-            "BTC-USDC": Decimal("10"),
-            "HYPE-USDC": Decimal("10"),
+            "BTC-USDC": Decimal("7.95"),
+            "ETH-USDC": Decimal("3"),
         },
         json_schema_extra={"is_updatable": True},
     )
 
     pair_max_total_position_notional: dict[str, Decimal] = Field(
         default_factory=lambda: {
-            "BTC-USDC": Decimal("350"),
-            "HYPE-USDC": Decimal("350"),
+            "BTC-USDC": Decimal("1800"),
+            "ETH-USDC": Decimal("2200"),
         },
         json_schema_extra={"is_updatable": True},
     )
     pair_max_side_position_notional: dict[str, Decimal] = Field(
         default_factory=lambda: {
-            "BTC-USDC": Decimal("250"),
-            "HYPE-USDC": Decimal("250"),
+            "BTC-USDC": Decimal("900"),
+            "ETH-USDC": Decimal("1100"),
         },
         json_schema_extra={"is_updatable": True},
     )
@@ -144,15 +144,15 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
         default=Decimal("0.20"), ge=0, lt=1, json_schema_extra={"is_updatable": True}
     )
     portfolio_betas: dict[str, Decimal] = Field(
-        default_factory=lambda: {"BTC-USDC": Decimal("1"), "HYPE-USDC": Decimal("1")},
+        default_factory=lambda: {"BTC-USDC": Decimal("1"), "ETH-USDC": Decimal("1")},
         json_schema_extra={"is_updatable": True},
     )
 
-    minimum_order_lifetime_seconds: float = Field(default=30.0, ge=0)
-    minimum_replace_interval_seconds: float = Field(default=0.0, ge=0)
+    minimum_order_lifetime_seconds: float = Field(default=60.0, ge=0)
+    minimum_replace_interval_seconds: float = Field(default=30.0, ge=0)
     maximum_order_lifetime_seconds: float = Field(default=600.0, ge=0)
-    refresh_price_tolerance_bps: Decimal = Field(default=Decimal("5"), ge=0)
-    refresh_amount_tolerance_pct: Decimal = Field(default=Decimal("0.05"), ge=0)
+    refresh_price_tolerance_bps: Decimal = Field(default=Decimal("15"), ge=0)
+    refresh_amount_tolerance_pct: Decimal = Field(default=Decimal("0.15"), ge=0)
     max_consecutive_order_errors: int = Field(default=3, ge=1)
     order_error_pause_seconds: float = Field(default=60.0, ge=0)
     stale_plan_timeout_seconds: float = Field(default=30.0, gt=0)
@@ -170,13 +170,16 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
 
     @model_validator(mode="after")
     def validate_portfolio_contract(self) -> DeriveAdaptiveGridPortfolioConfig:
-        validate_btc_hype_pairs(self.trading_pairs)
-        if self.trading_pair != "BTC-USDC":
-            raise ValueError("trading_pair compatibility field must remain BTC-USDC")
+        configured_pairs = validate_trading_pairs(self.trading_pairs)
+        compatibility_pair = str(self.trading_pair).strip().upper()
+        object.__setattr__(self, "trading_pairs", configured_pairs)
+        object.__setattr__(self, "trading_pair", compatibility_pair)
+        if compatibility_pair not in configured_pairs:
+            raise ValueError("trading_pair compatibility field must be one of trading_pairs")
         if self.connector_name != "derive_perpetual_testnet":
-            raise ValueError("BTC/HYPE portfolio execution is testnet-only")
+            raise ValueError("Derive portfolio execution is testnet-only")
         if self.environment != "testnet":
-            raise ValueError("BTC/HYPE portfolio execution requires environment=testnet")
+            raise ValueError("Derive portfolio execution requires environment=testnet")
         if any(
             value != "testnet"
             for value in (
@@ -186,13 +189,13 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
                 self.execution_environment,
             )
         ):
-            raise ValueError("all BTC/HYPE portfolio environments must be testnet")
+            raise ValueError("all Derive portfolio environments must be testnet")
         if self.allow_mainnet_trading:
-            raise ValueError("BTC/HYPE portfolio execution cannot allow mainnet trading")
+            raise ValueError("Derive portfolio execution cannot allow mainnet trading")
         if self.leverage > 10:
-            raise ValueError("BTC/HYPE portfolio rollout supports at most leverage=10")
+            raise ValueError("Derive portfolio rollout supports at most leverage=10")
         if not self.post_only:
-            raise ValueError("BTC/HYPE portfolio execution requires post_only=true")
+            raise ValueError("Derive portfolio execution requires post_only=true")
         if self.maximum_order_lifetime_seconds < self.minimum_order_lifetime_seconds:
             raise ValueError("maximum order lifetime must not be below minimum lifetime")
         if self.portfolio_hard_beta_exposure <= self.portfolio_soft_beta_exposure:
@@ -203,8 +206,13 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
             ("pair_max_side_position_notional", self.pair_max_side_position_notional),
             ("portfolio_betas", self.portfolio_betas),
         ):
-            if set(values) != set(self.trading_pairs):
-                raise ValueError(f"{field_name} must contain exactly the configured pairs")
+            missing = set(configured_pairs) - set(values)
+            if missing:
+                missing_pairs = ", ".join(sorted(missing))
+                raise ValueError(
+                    f"{field_name} must define every configured pair; "
+                    f"missing {missing_pairs}"
+                )
             if field_name != "portfolio_betas" and any(value <= 0 for value in values.values()):
                 raise ValueError(f"{field_name} values must be positive")
         if any(value == 0 for value in self.portfolio_betas.values()):
@@ -218,7 +226,7 @@ class DeriveAdaptiveGridPortfolioConfig(ControllerConfigBase):
 
 
 class DeriveAdaptiveGridPortfolio(ControllerBase):
-    """Pair-scoped grid lifecycle with one shared BTC/HYPE risk boundary."""
+    """Pair-scoped grid lifecycle with one shared portfolio risk boundary."""
 
     def __init__(self, config: DeriveAdaptiveGridPortfolioConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
@@ -916,7 +924,7 @@ class DeriveAdaptiveGridPortfolio(ControllerBase):
         pair_states = data.get("pair_states", {})
         lines = [
             "╔ DERIVE ADAPTIVE GRID PORTFOLIO ═══════╗",
-            "Pairs: BTC-USDC, HYPE-USDC  Environment: TESTNET",
+            f"Pairs: {', '.join(self.config.trading_pairs)}  Environment: TESTNET",
         ]
         for pair in self.config.trading_pairs:
             state = pair_states.get(pair, {})

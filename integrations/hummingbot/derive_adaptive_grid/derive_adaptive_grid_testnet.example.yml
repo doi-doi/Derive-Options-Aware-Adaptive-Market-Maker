@@ -7,6 +7,11 @@ controller_type: market_making
 
 connector_name: derive_perpetual_testnet
 trading_pair: BTC-USDC
+environment: testnet
+market_environment: testnet
+options_environment: testnet
+account_environment: testnet
+execution_environment: testnet
 leverage: 1
 position_mode: ONEWAY
 allow_mainnet_trading: false
@@ -25,10 +30,11 @@ max_total_position_notional: 1000
 max_side_position_notional: 1000
 max_active_grid_levels: 2
 max_active_executors: 2
-minimum_order_lifetime_seconds: 30
+minimum_order_lifetime_seconds: 60
+minimum_replace_interval_seconds: 30
 maximum_order_lifetime_seconds: 600
-refresh_price_tolerance_bps: 5
-refresh_amount_tolerance_pct: 0.05
+refresh_price_tolerance_bps: 15
+refresh_amount_tolerance_pct: 0.15
 max_consecutive_order_errors: 3
 order_error_pause_seconds: 60
 stale_plan_timeout_seconds: 30

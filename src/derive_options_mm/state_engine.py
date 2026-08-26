@@ -113,6 +113,7 @@ class MarketState(BaseModel):
 
     timestamp: str
     trading_pair: str
+    market_environment: str = "testnet"
 
     volatility_state: VolatilityState
     volatility_score: float | None = None

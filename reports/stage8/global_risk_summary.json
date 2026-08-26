@@ -1,0 +1,24 @@
+{
+  "latest": {
+    "btc_atm_iv": 0.44828024197289623,
+    "btc_iv_age_seconds": 1.0,
+    "btc_iv_available": true,
+    "btc_iv_change": -0.0028190327236263246,
+    "btc_iv_ratio": 0.9141547847977194,
+    "btc_iv_score": 0.9141547847977194,
+    "btc_iv_stale": false,
+    "btc_options_confidence": 1.0,
+    "global_risk_regime": "normal",
+    "global_risk_score": 0.9141547847977194,
+    "reasons": [
+      "BTC ATM IV ratio 0.914x recent median",
+      "BTC ATM IV change -0.0028"
+    ],
+    "source_asset": "BTC",
+    "source_pair": "BTC-USDC",
+    "timestamp": "2023-11-14T22:24:55.000Z"
+  },
+  "options_processed_once_per_tick": true,
+  "options_update_count": 140,
+  "ticks": 140
+}

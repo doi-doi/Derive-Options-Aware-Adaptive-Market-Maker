@@ -1,4 +1,4 @@
-"""Pure shared-risk routing for the BTC/HYPE execution controller.
+"""Pure shared-risk routing for the configurable portfolio controller.
 
 The Stage 8 coordinator remains the source of truth for read-only multi-asset
 state and theoretical plans.  This small adapter is intentionally independent

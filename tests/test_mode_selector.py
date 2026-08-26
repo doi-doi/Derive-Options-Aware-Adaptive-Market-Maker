@@ -219,6 +219,48 @@ def test_pause_recovery_is_delayed() -> None:
     assert recovered.transition_occurred is True
 
 
+def test_pause_recovery_accepts_confirmed_directional_mode() -> None:
+    selector = ModeSelector(
+        _config(
+            pause_recovery_samples=3,
+            mode_confirmation_samples=1,
+            minimum_mode_duration_seconds=0,
+        )
+    )
+    assert selector.update(_state(0, valid=False)).mode is GridMode.PAUSE
+    first = selector.update(
+        _state(1, direction=DirectionState.BULLISH, direction_score=0.50)
+    )
+    second = selector.update(
+        _state(2, direction=DirectionState.BULLISH, direction_score=0.50)
+    )
+    recovered = selector.update(
+        _state(3, direction=DirectionState.BULLISH, direction_score=0.50)
+    )
+
+    assert first.mode is GridMode.PAUSE
+    assert second.mode is GridMode.PAUSE
+    assert recovered.mode is GridMode.LONG_BIAS
+    assert recovered.transition_occurred is True
+
+
+def test_pause_recovery_accepts_defensive_candidate() -> None:
+    selector = ModeSelector(
+        _config(
+            pause_recovery_samples=1,
+            mode_confirmation_samples=1,
+            minimum_mode_duration_seconds=0,
+        )
+    )
+    assert selector.update(_state(0, valid=False)).mode is GridMode.PAUSE
+    decision = selector.update(
+        _state(1, volatility=VolatilityState.HIGH, direction=DirectionState.BULLISH)
+    )
+
+    assert decision.mode is GridMode.DEFENSIVE
+    assert decision.transition_occurred is True
+
+
 def test_defensive_exit_requires_confirmation() -> None:
     selector = ModeSelector(
         _config(

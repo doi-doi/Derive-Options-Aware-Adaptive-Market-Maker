@@ -87,6 +87,7 @@ class GridModeDecision(BaseModel):
 
     timestamp: str
     trading_pair: str
+    market_environment: str = "testnet"
     mode: GridMode
     previous_mode: GridMode | None = None
     transition_occurred: bool = False
@@ -422,7 +423,13 @@ class ModeSelector:
         timestamp_seconds: float,
         previous_mode: GridMode | None,
     ) -> GridModeDecision:
-        if evaluation.mode is not GridMode.NORMAL:
+        recoverable_modes = {
+            GridMode.NORMAL,
+            GridMode.DEFENSIVE,
+            GridMode.LONG_BIAS,
+            GridMode.SHORT_BIAS,
+        }
+        if evaluation.mode not in recoverable_modes:
             self._reset_candidate()
             self._pause_safe_since = None
             return self._decision(
@@ -430,11 +437,11 @@ class ModeSelector:
                 previous_mode=previous_mode,
                 reasons=[
                     *evaluation.reasons,
-                    "PAUSE recovery requires a normal-risk candidate",
+                    "PAUSE recovery requires a normal, defensive, or directional-risk candidate",
                 ],
             )
 
-        count = self._track_candidate(GridMode.NORMAL)
+        count = self._track_candidate(evaluation.mode)
         if self._pause_safe_since is None:
             self._pause_safe_since = timestamp_seconds
         elapsed = timestamp_seconds - self._pause_safe_since
@@ -443,10 +450,11 @@ class ModeSelector:
             and elapsed >= self.config.pause_recovery_seconds
         )
         if ready:
-            self._activate(GridMode.NORMAL, timestamp_seconds)
+            self._activate(evaluation.mode, timestamp_seconds)
             reasons = [
                 *evaluation.reasons,
-                f"PAUSE recovery complete after {count} safe observations",
+                f"PAUSE recovery complete to {evaluation.mode.name} after "
+                f"{count} safe observations",
             ]
         else:
             reasons = [

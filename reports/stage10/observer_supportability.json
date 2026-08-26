@@ -1,0 +1,185 @@
+{
+  "asset": "ALL",
+  "deferred": {
+    "automatic_configuration_mutation": "not implemented; requires a later approved phase",
+    "phase_2": "diagnosis only after Phase 1 evidence is sufficient",
+    "phase_3": "suggest-only proposals after diagnosis is implemented",
+    "phase_4_plus": "shadow/champion evaluation and any bounded promotion workflow"
+  },
+  "mode": "SUGGEST_ONLY",
+  "observation": {
+    "source_record_counts": {
+      "execution_journal": 0,
+      "plan": 409,
+      "portfolio_risk": 4666,
+      "relationship": 18664,
+      "state": 5694
+    },
+    "source_status": {
+      "execution_journal": "missing",
+      "portfolio_risk": "ok",
+      "relationship": "ok",
+      "state": "ok"
+    },
+    "window": {
+      "adverse_markout_rate": null,
+      "asset": "ALL",
+      "cancel_create_ratio": null,
+      "completed_cycles": null,
+      "confidence": "LOW",
+      "drawdown": null,
+      "end_timestamp": "2026-08-25T16:08:46.305Z",
+      "evidence_source": "LIVE_OBSERVED",
+      "fees_if_known": null,
+      "fill_create_ratio": null,
+      "fills": null,
+      "global_volatility_regime": "normal",
+      "inventory_ratio_max": 0.0,
+      "inventory_ratio_mean": 0.0,
+      "keep_ratio": null,
+      "maker_capture_quote": null,
+      "markout_30s": null,
+      "markout_5s": null,
+      "markout_60s": null,
+      "mean_order_lifetime": null,
+      "median_order_lifetime": null,
+      "metric_status": {
+        "completed_cycles": "UNKNOWN",
+        "drawdown": "UNKNOWN",
+        "fees_if_known": "UNKNOWN",
+        "fills": "UNKNOWN",
+        "inventory_ratio_mean": "AVAILABLE",
+        "maker_capture_quote": "UNKNOWN",
+        "markout_30s": "UNKNOWN",
+        "markout_5s": "UNKNOWN",
+        "markout_60s": "UNKNOWN",
+        "median_order_lifetime": "UNKNOWN",
+        "orders_cancelled": "UNKNOWN",
+        "orders_created": "UNKNOWN",
+        "orders_kept": "UNKNOWN",
+        "orders_refreshed": "UNKNOWN",
+        "portfolio_beta_exposure_mean": "AVAILABLE",
+        "realized_pnl": "UNKNOWN",
+        "total_pnl": "UNKNOWN",
+        "turnover": "UNKNOWN",
+        "unrealized_pnl": "UNKNOWN"
+      },
+      "mode": "normal",
+      "orders_cancelled": null,
+      "orders_created": null,
+      "orders_kept": null,
+      "orders_refreshed": null,
+      "portfolio_beta_exposure_max": 0.0,
+      "portfolio_beta_exposure_mean": 0.0,
+      "realized_pnl": null,
+      "reasons": [
+        "execution journal is missing or unavailable; order lifecycle metrics remain UNKNOWN"
+      ],
+      "relationship_regime": "UNKNOWN",
+      "safety_cancels": null,
+      "sample_count": 0,
+      "start_timestamp": "2026-08-25T15:38:46.305Z",
+      "total_pnl": null,
+      "turnover": null,
+      "unrealized_pnl": null
+    }
+  },
+  "observer_config": {
+    "evaluation_window_minutes": 30,
+    "markout_horizons_seconds": [
+      5,
+      30,
+      60
+    ],
+    "minimum_completed_cycles_for_capture_metrics": 3,
+    "minimum_fills_for_fill_metrics": 5,
+    "minimum_order_events": 20
+  },
+  "phase": "PHASE1_OBSERVER_ONLY",
+  "source_record_counts": {
+    "execution_journal": 0,
+    "plan": 409,
+    "portfolio_risk": 4666,
+    "relationship": 18664,
+    "state": 5694
+  },
+  "source_status": {
+    "execution_journal": "missing",
+    "portfolio_risk": "ok",
+    "relationship": "ok",
+    "state": "ok"
+  },
+  "sources": {
+    "execution_journal": {
+      "error": "file not found",
+      "latest_timestamp": null,
+      "malformed_lines": 0,
+      "partial_trailing_line": false,
+      "path": "/Users/wilfred/Documents/Hummingbot/condor/data/derive_execution_events.jsonl",
+      "records_read": 0,
+      "size_bytes": 0,
+      "status": "missing"
+    },
+    "mode": {
+      "error": null,
+      "latest_timestamp": "2026-08-25T16:08:46.305Z",
+      "malformed_lines": 0,
+      "partial_trailing_line": false,
+      "path": "/Users/wilfred/Documents/Hummingbot/condor/data/derive_grid_modes.jsonl",
+      "records_read": 30424,
+      "size_bytes": 17107618,
+      "status": "ok"
+    },
+    "plan": {
+      "error": null,
+      "latest_timestamp": "2026-08-25T16:08:46.305Z",
+      "malformed_lines": 0,
+      "partial_trailing_line": false,
+      "path": "/Users/wilfred/Documents/Hummingbot/condor/data/derive_grid_plans.jsonl",
+      "records_read": 409,
+      "size_bytes": 1106469,
+      "status": "ok"
+    },
+    "portfolio_risk": {
+      "error": null,
+      "latest_timestamp": "2026-08-25T16:08:44.634Z",
+      "malformed_lines": 0,
+      "partial_trailing_line": false,
+      "path": "/Users/wilfred/Documents/Hummingbot/condor/data/derive_portfolio_risk_states.jsonl",
+      "records_read": 4666,
+      "size_bytes": 9755730,
+      "status": "ok"
+    },
+    "relationship": {
+      "error": null,
+      "latest_timestamp": "2026-08-25T16:08:46.305Z",
+      "malformed_lines": 0,
+      "partial_trailing_line": false,
+      "path": "/Users/wilfred/Documents/Hummingbot/condor/data/derive_btc_relationship_states.jsonl",
+      "records_read": 18664,
+      "size_bytes": 10481159,
+      "status": "ok"
+    },
+    "snapshot": {
+      "error": null,
+      "latest_timestamp": "2026-08-25T16:08:46.305Z",
+      "malformed_lines": 0,
+      "partial_trailing_line": false,
+      "path": "/Users/wilfred/Documents/Hummingbot/condor/data/derive_market_snapshots.jsonl",
+      "records_read": 4227,
+      "size_bytes": 5779461,
+      "status": "ok"
+    },
+    "state": {
+      "error": null,
+      "latest_timestamp": "2026-08-25T16:08:46.305Z",
+      "malformed_lines": 0,
+      "partial_trailing_line": false,
+      "path": "/Users/wilfred/Documents/Hummingbot/condor/data/derive_market_states.jsonl",
+      "records_read": 5694,
+      "size_bytes": 15300296,
+      "status": "ok"
+    }
+  },
+  "stage": 10
+}

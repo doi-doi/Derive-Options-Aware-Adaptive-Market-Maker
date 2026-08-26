@@ -133,6 +133,7 @@ class GridPlan(BaseModel):
 
     timestamp: str
     trading_pair: str
+    market_environment: str = "testnet"
     mode: GridMode
     enabled: bool
 

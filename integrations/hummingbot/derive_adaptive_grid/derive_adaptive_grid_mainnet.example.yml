@@ -11,7 +11,7 @@ connector_name: derive_perpetual
 trading_pair: BTC-USDC
 environment: mainnet
 market_environment: mainnet
-options_environment: production
+options_environment: mainnet
 account_environment: mainnet
 execution_environment: mainnet
 leverage: 1

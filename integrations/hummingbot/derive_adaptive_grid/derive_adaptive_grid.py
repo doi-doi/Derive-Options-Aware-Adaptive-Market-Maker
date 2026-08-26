@@ -49,15 +49,17 @@ from .execution_logic import (
     reconcile_grid_plan,
 )
 from .mainnet_canary import (
-    MAINNET_CONNECTOR_NAME,
     CanaryRiskLimits,
     check_environment_consistency,
     environment_for_connector,
+    environment_profile,
     mainnet_canary_blockers,
     normalize_environment,
 )
 
 logger = logging.getLogger(__name__)
+
+SUPPORTED_TRADING_PAIRS = ("BTC-USDC", "ETH-USDC", "SOL-USDC", "HYPE-USDC")
 
 
 def _decimal(value: Any) -> Decimal | None:
@@ -162,7 +164,7 @@ class JsonlPlanTailer:
 
 
 class DeriveAdaptiveGridConfig(ControllerConfigBase):
-    """Execution-only configuration for one Derive BTC perpetual pair.
+    """Execution-only configuration for one supported Derive perpetual pair.
 
     The default remains the existing testnet dry run.  Mainnet is accepted
     only as a separate, explicitly populated canary configuration and remains
@@ -231,16 +233,19 @@ class DeriveAdaptiveGridConfig(ControllerConfigBase):
 
     # Queue protection and refresh controls.
     minimum_order_lifetime_seconds: float = Field(
+        default=60.0, ge=0, json_schema_extra={"is_updatable": True}
+    )
+    minimum_replace_interval_seconds: float = Field(
         default=30.0, ge=0, json_schema_extra={"is_updatable": True}
     )
     maximum_order_lifetime_seconds: float = Field(
         default=600.0, ge=0, json_schema_extra={"is_updatable": True}
     )
     refresh_price_tolerance_bps: Decimal = Field(
-        default=Decimal("5"), ge=0, json_schema_extra={"is_updatable": True}
+        default=Decimal("15"), ge=0, json_schema_extra={"is_updatable": True}
     )
     refresh_amount_tolerance_pct: Decimal = Field(
-        default=Decimal("0.05"), ge=0, json_schema_extra={"is_updatable": True}
+        default=Decimal("0.15"), ge=0, json_schema_extra={"is_updatable": True}
     )
     max_consecutive_order_errors: int = Field(
         default=3, ge=1, json_schema_extra={"is_updatable": True}
@@ -268,27 +273,26 @@ class DeriveAdaptiveGridConfig(ControllerConfigBase):
 
     @model_validator(mode="after")
     def validate_environment_contract(self) -> DeriveAdaptiveGridConfig:
-        if self.trading_pair != "BTC-USDC":
-            raise ValueError("Adaptive Grid currently supports only BTC-USDC")
+        if self.trading_pair not in SUPPORTED_TRADING_PAIRS:
+            raise ValueError("trading_pair must be one of " + ", ".join(SUPPORTED_TRADING_PAIRS))
         if not self.post_only:
             raise ValueError("Adaptive Grid requires post_only=true")
         if self.maximum_order_lifetime_seconds < self.minimum_order_lifetime_seconds:
             raise ValueError("maximum_order_lifetime_seconds must not be below minimum lifetime")
         if self.take_profit_mode not in {"adjacent_grid", "fixed"}:
             raise ValueError("take_profit_mode must be adjacent_grid or fixed")
-        configured_environment = normalize_environment(self.environment)
-        if self.connector_name == "derive_perpetual_testnet":
-            if configured_environment != "testnet":
-                raise ValueError("testnet connector requires environment=testnet")
+        configured_profile = environment_profile(self.environment)
+        if self.connector_name != configured_profile.connector_name:
+            raise ValueError(
+                "Execution blocked: connector_name does not match the selected "
+                f"{configured_profile.name} environment"
+            )
+        if not configured_profile.is_mainnet:
             if self.allow_mainnet_trading:
                 raise ValueError("testnet configuration cannot allow mainnet trading")
             if self.testnet_order_scale is None:
                 raise ValueError("testnet_order_scale must be configured for testnet")
             return self
-        if self.connector_name != MAINNET_CONNECTOR_NAME:
-            raise ValueError("Execution blocked: connector_name must be a supported Derive domain")
-        if configured_environment != "mainnet":
-            raise ValueError("mainnet connector requires environment=mainnet")
         if self.leverage != 1:
             raise ValueError("mainnet canary requires leverage=1")
         if self.execution_max_levels_per_side != 1:
@@ -305,7 +309,9 @@ class DeriveAdaptiveGridConfig(ControllerConfigBase):
             self.account_environment,
             self.execution_environment,
         )
-        if any(normalize_environment(value) != "mainnet" for value in environments):
+        if any(
+            normalize_environment(value) != configured_profile.name for value in environments
+        ):
             raise ValueError(
                 "mainnet requires all market/options/account/execution environments to be mainnet"
             )
@@ -318,7 +324,7 @@ class DeriveAdaptiveGridConfig(ControllerConfigBase):
             blockers = mainnet_canary_blockers(
                 mainnet_environment_verified=self.mainnet_environment_verified,
                 environment_consistent=check_environment_consistency(
-                    required_environment="mainnet",
+                    required_environment=configured_profile.name,
                     market_connector=self.connector_name,
                     market_domain=self.connector_name,
                     options_environment=self.options_environment,
@@ -376,18 +382,22 @@ class DeriveAdaptiveGrid(ControllerBase):
             self._consecutive_order_errors >= self.config.max_consecutive_order_errors
             and now < self._order_error_pause_until
         )
-        is_mainnet = self.config.connector_name == MAINNET_CONNECTOR_NAME
+        environment = environment_profile(self.config.environment)
         order_scale = (
             self.config.mainnet_canary_order_scale
-            if is_mainnet
+            if environment.is_mainnet
             else self.config.testnet_order_scale
         )
         total_limit = (
             self.config.mainnet_canary_max_total_position_notional
-            if is_mainnet
+            if environment.is_mainnet
             else self.config.max_total_position_notional
         )
-        side_limit = total_limit if is_mainnet else self.config.max_side_position_notional
+        side_limit = (
+            total_limit
+            if environment.is_mainnet
+            else self.config.max_side_position_notional
+        )
         return ExecutionPolicy(
             execution_max_levels_per_side=self.config.execution_max_levels_per_side,
             testnet_order_scale=order_scale,
@@ -396,6 +406,7 @@ class DeriveAdaptiveGrid(ControllerBase):
             max_active_grid_levels=self.config.max_active_grid_levels,
             max_active_executors=self.config.max_active_executors,
             minimum_order_lifetime_seconds=self.config.minimum_order_lifetime_seconds,
+            minimum_replace_interval_seconds=self.config.minimum_replace_interval_seconds,
             maximum_order_lifetime_seconds=self.config.maximum_order_lifetime_seconds,
             refresh_price_tolerance_bps=self.config.refresh_price_tolerance_bps,
             refresh_amount_tolerance_pct=self.config.refresh_amount_tolerance_pct,
@@ -412,7 +423,7 @@ class DeriveAdaptiveGrid(ControllerBase):
             stop_loss_pct=self.config.stop_loss_pct,
             time_limit_seconds=self.config.time_limit_seconds,
             forced_pause_reason="order_error_pause" if error_pause_active else "",
-            environment=normalize_environment(self.config.environment),
+            environment=environment.name,
             mainnet_canary_authorized=(
                 self.config.mainnet_environment_verified
                 and self.config.allow_mainnet_trading
@@ -458,10 +469,11 @@ class DeriveAdaptiveGrid(ControllerBase):
         provider_ready = bool(getattr(self.market_data_provider, "ready", False))
         connector = None
         testnet_verified = False
-        configured_environment = normalize_environment(self.config.environment)
+        configured_profile = environment_profile(self.config.environment)
+        configured_environment = configured_profile.name
         environment = configured_environment
         environment_verified = False
-        environment_consistent = configured_environment != "mainnet"
+        environment_consistent = not configured_profile.is_mainnet
         canary_authorized = False
         connector_ready = False
         rules = None
@@ -476,12 +488,10 @@ class DeriveAdaptiveGrid(ControllerBase):
             domain = str(getattr(connector, "domain", ""))
             runtime_environment = environment_for_connector(connector_name, domain)
             environment_verified = runtime_environment == configured_environment
-            testnet_verified = (
-                runtime_environment == "testnet" and configured_environment == "testnet"
-            )
-            if configured_environment == "mainnet":
+            testnet_verified = not configured_profile.is_mainnet and environment_verified
+            if configured_profile.is_mainnet:
                 consistency = check_environment_consistency(
-                    required_environment="mainnet",
+                    required_environment=configured_profile.name,
                     market_connector=connector_name,
                     market_domain=domain,
                     options_environment=self.config.options_environment,
@@ -535,7 +545,7 @@ class DeriveAdaptiveGrid(ControllerBase):
             )
             mid = ((best_bid + best_ask) / Decimal("2")) if best_bid and best_ask else Decimal("0")
             position_notional = self._read_position_notional(connector, mid)
-            if configured_environment == "mainnet" and not self._mainnet_initial_account_checked:
+            if configured_profile.is_mainnet and not self._mainnet_initial_account_checked:
                 self._mainnet_initial_account_checked = True
                 open_orders = getattr(connector, "in_flight_orders", None)
                 if open_orders is None:
@@ -658,6 +668,9 @@ class DeriveAdaptiveGrid(ControllerBase):
                     created_at=float(getattr(executor, "timestamp", 0) or 0),
                     is_filled=is_filled,
                     plan_mode=self._executor_plan_mode(executor.id),
+                    last_replace_at=_decimal(custom.get("last_replace_at"))
+                    if custom.get("last_replace_at") is not None
+                    else None,
                 )
             )
         self._pending_stop_ids.intersection_update({item.executor_id for item in active})
@@ -776,6 +789,10 @@ class DeriveAdaptiveGrid(ControllerBase):
             "filled_position_levels": filled_ids,
             "levels_to_create": [item.level_id for item in result.creates],
             "levels_to_stop": [item.level_id for item in result.stops],
+            "keep_count": len(result.keeps),
+            "refresh_count": sum(result.replacement_reason_counts.values()),
+            "replacement_reason_counts": result.replacement_reason_counts,
+            "keep_reasons": result.keep_reasons,
             "levels_blocked_by_inventory": inventory_blocks,
             "levels_blocked_by_balance": balance_blocks,
             "levels_blocked_by_minimum": minimum_blocks,
@@ -928,7 +945,8 @@ class DeriveAdaptiveGrid(ControllerBase):
     def _executor_config(self, desired) -> PositionExecutorConfig:
         now = float(self.market_data_provider.time())
         executor_id = (
-            f"{self.config.id}__{desired.level_id}__v{desired.plan_version}"
+            f"{self.config.id}__{self.config.trading_pair}__{desired.level_id}"
+            f"__v{desired.plan_version}"
             f"__mode_{desired.mode}__{int(now * 1000)}"
         )
         side = TradeType.BUY if desired.side is ExecutionSide.BUY else TradeType.SELL
@@ -1040,6 +1058,15 @@ class DeriveAdaptiveGrid(ControllerBase):
             "metrics": {
                 "orders_created": self._orders_created,
                 "orders_cancelled": self._orders_cancelled,
+                "keep_count": len((self._last_reconciliation or ReconciliationResult()).keeps),
+                "refresh_count": sum(
+                    (
+                        self._last_reconciliation or ReconciliationResult()
+                    ).replacement_reason_counts.values()
+                ),
+                "replacement_reason_counts": (
+                    self._last_reconciliation or ReconciliationResult()
+                ).replacement_reason_counts,
                 "order_errors": self._consecutive_order_errors,
                 "fills": self._fills,
                 "maker_buy_fills": self._maker_buy_fills,

@@ -1,0 +1,8 @@
+{
+  "comparable_valid_frames": 121,
+  "mode_mismatches": 0,
+  "plan_mismatches": 0,
+  "state_mismatches": 0,
+  "tolerance": 1e-12,
+  "within_tolerance": true
+}

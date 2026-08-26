@@ -47,6 +47,7 @@ def _record(
     mode: str = "normal",
     enabled: bool = True,
     valid: bool = True,
+    plan_change_significant: bool = False,
     buys: list[dict] | None = None,
     sells: list[dict] | None = None,
 ) -> dict:
@@ -57,7 +58,7 @@ def _record(
         "enabled": enabled,
         "valid": valid,
         "plan_version": 7,
-        "plan_change_significant": False,
+        "plan_change_significant": plan_change_significant,
         "center_price": "100",
         "total_grid_width_pct": "0.04",
         "buy_levels": buys if buys is not None else [_level("buy", 0, "99")],
@@ -110,7 +111,8 @@ def _policy(**kwargs: object) -> ExecutionPolicy:
         "max_side_position_notional": Decimal("1000"),
         "max_active_grid_levels": 4,
         "max_active_executors": 4,
-        "minimum_order_lifetime_seconds": 30.0,
+        "minimum_order_lifetime_seconds": 60.0,
+        "minimum_replace_interval_seconds": 30.0,
         "maximum_order_lifetime_seconds": 600.0,
     }
     values.update(kwargs)
@@ -342,7 +344,11 @@ def test_duplicate_active_level_is_stopped_before_any_replacement() -> None:
 
 def test_material_change_stops_after_minimum_lifetime_and_defers_create() -> None:
     active = [_active("buy_0", ExecutionSide.BUY, price="98", created_at=NOW - 60)]
-    result = _reconcile(_plan(sells=[]), active=active, now=NOW)
+    result = _reconcile(
+        _plan(sells=[], plan_change_significant=True),
+        active=active,
+        now=NOW,
+    )
 
     assert result.stops[0].reason == "stale or materially changed level"
     assert result.creates == []
@@ -364,6 +370,20 @@ def test_maximum_lifetime_refreshes_even_when_price_is_unchanged() -> None:
 def test_insignificant_quantized_price_movement_keeps_existing_level() -> None:
     active = [_active("buy_0", ExecutionSide.BUY, price="99", created_at=NOW - 60)]
     plan = _plan(buys=[_level("buy", 0, "99.04")], sells=[])
+    result = _reconcile(plan, active=active, now=NOW)
+
+    assert result.keeps == ["buy_0"]
+    assert result.stops == []
+    assert result.creates == []
+
+
+def test_large_non_significant_plan_move_keeps_existing_queue_position() -> None:
+    active = [_active("buy_0", ExecutionSide.BUY, price="98", created_at=NOW - 60)]
+    plan = _plan(
+        buys=[_level("buy", 0, "99")],
+        sells=[],
+        plan_change_significant=False,
+    )
     result = _reconcile(plan, active=active, now=NOW)
 
     assert result.keeps == ["buy_0"]

@@ -17,6 +17,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from derive_options_mm.environment import environment_profile
+
 ZERO = Decimal("0")
 ONE = Decimal("1")
 BPS = Decimal("10000")
@@ -39,6 +41,11 @@ class PlanLevel:
     @property
     def level_id(self) -> str:
         return f"{self.side.value}_{self.level_index}"
+
+    def scoped_level_id(self, trading_pair: str) -> str:
+        """Return a stable key that cannot collide across markets."""
+
+        return f"{trading_pair}::{self.level_id}"
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,12 @@ class GridPlanView:
     @property
     def levels(self) -> tuple[PlanLevel, ...]:
         return self.buy_levels + self.sell_levels
+
+    @property
+    def scoped_level_ids(self) -> tuple[str, ...]:
+        """Return pair-qualified level IDs for portfolio-aware routing."""
+
+        return tuple(level.scoped_level_id(self.trading_pair) for level in self.levels)
 
 
 @dataclass(frozen=True)
@@ -95,6 +108,7 @@ class ActiveLevel:
     is_filled: bool
     is_active: bool = True
     plan_mode: str | None = None
+    last_replace_at: float | None = None
 
 
 @dataclass(frozen=True)
@@ -120,15 +134,13 @@ class RuntimeHealth:
 
     @property
     def ready_for_new_entries(self) -> bool:
+        environment = environment_profile(self.environment)
         environment_ready = (
             self.testnet_verified
-            if self.environment == "testnet"
-            else (
-                self.environment == "mainnet"
-                and self.environment_verified
-                and self.environment_consistent
-                and self.mainnet_canary_authorized
-            )
+            if not environment.is_mainnet
+            else self.environment_verified
+            and self.environment_consistent
+            and self.mainnet_canary_authorized
         )
         return all(
             (
@@ -159,10 +171,11 @@ class ExecutionPolicy:
     max_side_position_notional: Decimal | None = Decimal("1000")
     max_active_grid_levels: int = 2
     max_active_executors: int = 2
-    minimum_order_lifetime_seconds: float = 30.0
+    minimum_order_lifetime_seconds: float = 60.0
+    minimum_replace_interval_seconds: float = 30.0
     maximum_order_lifetime_seconds: float = 600.0
-    refresh_price_tolerance_bps: Decimal = Decimal("5")
-    refresh_amount_tolerance_pct: Decimal = Decimal("0.05")
+    refresh_price_tolerance_bps: Decimal = Decimal("15")
+    refresh_amount_tolerance_pct: Decimal = Decimal("0.15")
     collateral_safety_buffer_pct: Decimal = Decimal("0.10")
     leverage: Decimal = Decimal("1")
     stale_plan_timeout_seconds: float = 30.0
@@ -184,7 +197,8 @@ class ExecutionPolicy:
     def __post_init__(self) -> None:
         if self.execution_max_levels_per_side < 1:
             raise ValueError("execution_max_levels_per_side must be positive")
-        if self.environment == "mainnet":
+        environment = environment_profile(self.environment)
+        if environment.is_mainnet:
             for name, value in (
                 ("mainnet order scale", self.testnet_order_scale),
                 ("max_total_position_notional", self.max_total_position_notional),
@@ -213,6 +227,8 @@ class ExecutionPolicy:
             raise ValueError("refresh_amount_tolerance_pct must be non-negative")
         if self.minimum_order_lifetime_seconds < 0:
             raise ValueError("minimum_order_lifetime_seconds must be non-negative")
+        if self.minimum_replace_interval_seconds < 0:
+            raise ValueError("minimum_replace_interval_seconds must be non-negative")
         if self.maximum_order_lifetime_seconds < self.minimum_order_lifetime_seconds:
             raise ValueError("maximum_order_lifetime_seconds must not be below minimum lifetime")
         if self.stale_plan_timeout_seconds <= 0:
@@ -247,6 +263,7 @@ class StopIntent:
     level_id: str
     reason: str
     keep_position: bool = False
+    reason_code: str = ""
 
 
 @dataclass(frozen=True)
@@ -273,6 +290,8 @@ class ReconciliationResult:
     potential_long_exposure: Decimal = ZERO
     potential_short_exposure: Decimal = ZERO
     testnet_verified: bool = False
+    keep_reasons: dict[str, str] = field(default_factory=dict)
+    replacement_reason_counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def paused(self) -> bool:
@@ -481,7 +500,7 @@ def quantize_level(
 def _deviation_bps(current: Decimal, desired: Decimal) -> Decimal:
     if current <= ZERO or desired <= ZERO:
         return Decimal("Infinity")
-    return abs(current - desired) / desired * BPS
+    return abs(current - desired) / current * BPS
 
 
 def _amount_deviation(current: Decimal, desired: Decimal) -> Decimal:
@@ -511,7 +530,7 @@ def _pause_reason(
         return "GridPlan PAUSE", age
     if policy.forced_pause_reason:
         return policy.forced_pause_reason, age
-    if policy.environment == "mainnet":
+    if environment_profile(policy.environment).is_mainnet:
         if policy.mainnet_canary_max_loss_quote is None:
             return "mainnet canary loss budget is not configured", age
         if policy.stop_loss_pct is None or policy.stop_loss_pct <= ZERO:
@@ -584,9 +603,22 @@ def reconcile_grid_plan(
                 )
             )
 
-    def stop_unfilled(item: ActiveLevel, stop_reason: str) -> None:
+    def stop_unfilled(
+        item: ActiveLevel,
+        stop_reason: str,
+        *,
+        reason_code: str = "",
+    ) -> None:
         if not any(stop.executor_id == item.executor_id for stop in result.stops):
-            result.stops.append(StopIntent(item.executor_id, item.level_id, stop_reason, False))
+            result.stops.append(
+                StopIntent(
+                    item.executor_id,
+                    item.level_id,
+                    stop_reason,
+                    False,
+                    reason_code,
+                )
+            )
 
     if reason:
         if policy.cancel_orders_on_pause or policy.manual_kill_switch:
@@ -648,18 +680,56 @@ def reconcile_grid_plan(
             and item.price <= health.best_bid
         )
         mode_changed = item.plan_mode is not None and item.plan_mode != plan.mode
+        price_deviation_bps = _deviation_bps(item.price, desired.price)
+        amount_deviation_pct = _amount_deviation(item.quote_notional, desired.quote_notional)
+        # Stage 4 can emit records without a meaningful plan movement.  Do
+        # not surrender maker queue position for those records; significant
+        # plan changes still reprice when the actual order is materially off.
+        plan_change_requires_refresh = plan.plan_change_significant and (
+            price_deviation_bps >= policy.refresh_price_tolerance_bps
+            or amount_deviation_pct >= policy.refresh_amount_tolerance_pct
+        )
         needs_refresh = (
             crossing
-            or mode_changed
             or age_seconds >= policy.maximum_order_lifetime_seconds
-            or _deviation_bps(item.price, desired.price) > policy.refresh_price_tolerance_bps
-            or _amount_deviation(item.quote_notional, desired.quote_notional)
-            > policy.refresh_amount_tolerance_pct
+            or plan_change_requires_refresh
         )
-        if not needs_refresh or age_seconds < policy.minimum_order_lifetime_seconds:
+        replace_anchor = (
+            item.last_replace_at if item.last_replace_at is not None else item.created_at
+        )
+        replacement_elapsed = max(0.0, now_epoch - replace_anchor)
+        if not needs_refresh:
             result.keeps.append(item.level_id)
+            result.keep_reasons[item.level_id] = "PRICE_WITHIN_DEADBAND_KEEP"
+        elif crossing:
+            # Marketability is a hard maker-safety exception; it is never
+            # delayed by an order-age or replacement cooldown.
+            stop_unfilled(item, "stale or materially changed level", reason_code="MAKER_SAFETY")
+            result.replacement_reason_counts["MAKER_SAFETY"] = (
+                result.replacement_reason_counts.get("MAKER_SAFETY", 0) + 1
+            )
+        elif age_seconds < policy.minimum_order_lifetime_seconds:
+            result.keeps.append(item.level_id)
+            result.keep_reasons[item.level_id] = "MINIMUM_ORDER_LIFETIME"
+        elif replacement_elapsed < policy.minimum_replace_interval_seconds:
+            result.keeps.append(item.level_id)
+            result.keep_reasons[item.level_id] = "REPLACEMENT_COOLDOWN"
         else:
-            stop_unfilled(item, "stale or materially changed level")
+            reason_code = (
+                "MAXIMUM_ORDER_AGE"
+                if age_seconds >= policy.maximum_order_lifetime_seconds
+                else "MATERIAL_PLAN_CHANGE"
+            )
+            stop_unfilled(item, "stale or materially changed level", reason_code=reason_code)
+            result.replacement_reason_counts[reason_code] = (
+                result.replacement_reason_counts.get(reason_code, 0) + 1
+            )
+
+        # The mode change is intentionally observed for diagnostics only.  A
+        # NORMAL/BIAS/DEFENSIVE label change does not itself cancel an order
+        # when its price and amount remain inside the execution deadband.
+        if mode_changed and item.level_id in result.keeps:
+            result.keep_reasons[item.level_id] = "MODE_CHANGE_WITHIN_DEADBAND_KEEP"
 
     # Preserve action ordering: stop stale/obsolete entries first, then create
     # on a later controller tick so a replacement cannot briefly double risk.
@@ -738,12 +808,9 @@ def reconcile_grid_plan(
                 )
             )
             continue
-        if (
-            policy.environment == "mainnet"
-            and (
-                policy.mainnet_canary_max_order_notional is None
-                or desired.quote_notional > policy.mainnet_canary_max_order_notional
-            )
+        if environment_profile(policy.environment).is_mainnet and (
+            policy.mainnet_canary_max_order_notional is None
+            or desired.quote_notional > policy.mainnet_canary_max_order_notional
         ):
             result.blocked.append(
                 BlockedLevel(

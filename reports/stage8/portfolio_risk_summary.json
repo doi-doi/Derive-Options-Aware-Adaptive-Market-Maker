@@ -1,0 +1,217 @@
+{
+  "latest": {
+    "active_executors": 15,
+    "allowed_level_ids": {
+      "BTC-USDC": [
+        "BTC-USDC::buy_0",
+        "BTC-USDC::buy_1",
+        "BTC-USDC::sell_0",
+        "BTC-USDC::sell_1",
+        "BTC-USDC::sell_2",
+        "BTC-USDC::sell_3",
+        "BTC-USDC::sell_4"
+      ],
+      "ETH-USDC": [
+        "ETH-USDC::sell_0",
+        "ETH-USDC::sell_1",
+        "ETH-USDC::sell_2",
+        "ETH-USDC::sell_3",
+        "ETH-USDC::sell_4"
+      ]
+    },
+    "blocked_level_ids": {
+      "BTC-USDC": [
+        "BTC-USDC::buy_2",
+        "BTC-USDC::buy_3",
+        "BTC-USDC::buy_4"
+      ],
+      "ETH-USDC": [
+        "ETH-USDC::buy_0",
+        "ETH-USDC::buy_1",
+        "ETH-USDC::buy_2",
+        "ETH-USDC::buy_3",
+        "ETH-USDC::buy_4"
+      ],
+      "HYPE-USDC": [
+        "HYPE-USDC::buy_0",
+        "HYPE-USDC::buy_1",
+        "HYPE-USDC::buy_2",
+        "HYPE-USDC::buy_3",
+        "HYPE-USDC::buy_4",
+        "HYPE-USDC::sell_0",
+        "HYPE-USDC::sell_1",
+        "HYPE-USDC::sell_2",
+        "HYPE-USDC::sell_3",
+        "HYPE-USDC::sell_4"
+      ],
+      "SOL-USDC": [
+        "SOL-USDC::buy_0",
+        "SOL-USDC::buy_1",
+        "SOL-USDC::buy_2",
+        "SOL-USDC::buy_3",
+        "SOL-USDC::buy_4",
+        "SOL-USDC::sell_0",
+        "SOL-USDC::sell_1",
+        "SOL-USDC::sell_2",
+        "SOL-USDC::sell_3",
+        "SOL-USDC::sell_4"
+      ]
+    },
+    "blocked_pairs": [
+      "BTC-USDC",
+      "ETH-USDC",
+      "HYPE-USDC",
+      "SOL-USDC"
+    ],
+    "blocked_sides": {
+      "BTC-USDC": [
+        "buy"
+      ],
+      "ETH-USDC": [
+        "buy"
+      ],
+      "HYPE-USDC": [
+        "buy",
+        "sell"
+      ],
+      "SOL-USDC": [
+        "buy",
+        "sell"
+      ]
+    },
+    "btc_beta_equivalent_exposure": 40.7302808629613,
+    "executor_cap_triggered": true,
+    "global_pause_new_exposure": false,
+    "gross_notional": 83.24591076771371,
+    "hard_limit_triggered": false,
+    "long_beta_exposure": 40.7302808629613,
+    "net_notional": 43.24158311089694,
+    "per_asset_active_executors": {
+      "BTC-USDC": 9,
+      "ETH-USDC": 6,
+      "HYPE-USDC": 0,
+      "SOL-USDC": 0
+    },
+    "per_asset_exposure": {
+      "BTC-USDC": 53.3608333997897,
+      "ETH-USDC": 29.88507736792401,
+      "HYPE-USDC": 0.0,
+      "SOL-USDC": 0.0
+    },
+    "portfolio_risk_ratio": 0.013576760287653767,
+    "reasons": [
+      "BTC-USDC buy blocked: per-asset active executor limit",
+      "ETH-USDC buy blocked: portfolio active executor limit",
+      "SOL-USDC buy blocked: portfolio active executor limit",
+      "SOL-USDC sell blocked: portfolio active executor limit",
+      "HYPE-USDC buy blocked: portfolio active executor limit",
+      "HYPE-USDC sell blocked: portfolio active executor limit"
+    ],
+    "risk_reducing_sides": {
+      "BTC-USDC": [
+        "sell"
+      ],
+      "ETH-USDC": [
+        "sell"
+      ]
+    },
+    "short_beta_exposure": 0.0,
+    "soft_limit_triggered": false,
+    "timestamp": "2023-11-14T22:24:55.000Z"
+  },
+  "metrics": {
+    "btc_beta_equivalent_exposure": 40.7302808629613,
+    "fill_model": "conservative_cross_through",
+    "gross_notional": 53.24491580411207,
+    "lookahead_violation": false,
+    "maker_fee_bps": 0.0,
+    "max_beta_equivalent_exposure": 75.48792267218195,
+    "max_gross_notional": 79.79217212302011,
+    "max_long_beta_exposure": 75.48792267218195,
+    "max_short_beta_exposure": 15.935357156319526,
+    "net_notional": 43.24158311089694,
+    "per_asset_inventory": {
+      "BTC-USDC": 0.0004134315745289805,
+      "ETH-USDC": 0.006582170671115524,
+      "HYPE-USDC": 0.0,
+      "SOL-USDC": 0.0
+    },
+    "portfolio_drawdown": 0.26109999027049824,
+    "portfolio_hard_limit_attempts": 0,
+    "portfolio_pnl": -0.07298593385536023,
+    "portfolio_soft_limit_ticks": 0,
+    "relationship_window_sensitivity": {
+      "BTC-USDC": {
+        "1800.0": {
+          "beta": 1.0,
+          "correlation": 1.0,
+          "observations": 0
+        },
+        "3600.0": {
+          "beta": 1.0,
+          "correlation": 1.0,
+          "observations": 0
+        },
+        "900.0": {
+          "beta": 1.0,
+          "correlation": 1.0,
+          "observations": 0
+        }
+      },
+      "ETH-USDC": {
+        "1800.0": {
+          "beta": 0.7458990155658781,
+          "correlation": 0.8424127368165728,
+          "observations": 139
+        },
+        "3600.0": {
+          "beta": 0.7458990155658781,
+          "correlation": 0.8424127368165728,
+          "observations": 139
+        },
+        "900.0": {
+          "beta": 0.7458990155658781,
+          "correlation": 0.8424127368165728,
+          "observations": 139
+        }
+      },
+      "HYPE-USDC": {
+        "1800.0": {
+          "beta": -0.18031155022714854,
+          "correlation": -0.07696582553859276,
+          "observations": 139
+        },
+        "3600.0": {
+          "beta": -0.18031155022714854,
+          "correlation": -0.07696582553859276,
+          "observations": 139
+        },
+        "900.0": {
+          "beta": -0.18031155022714854,
+          "correlation": -0.07696582553859276,
+          "observations": 139
+        }
+      },
+      "SOL-USDC": {
+        "1800.0": {
+          "beta": 1.2675650379734107,
+          "correlation": 0.7063662621072867,
+          "observations": 139
+        },
+        "3600.0": {
+          "beta": 1.2675650379734107,
+          "correlation": 0.7063662621072867,
+          "observations": 139
+        },
+        "900.0": {
+          "beta": 1.2675650379734107,
+          "correlation": 0.7063662621072867,
+          "observations": 139
+        }
+      }
+    },
+    "risk_blocks": 3375,
+    "same_direction_block_count": 734,
+    "ticks": 140
+  }
+}

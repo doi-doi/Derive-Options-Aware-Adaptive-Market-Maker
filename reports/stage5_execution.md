@@ -194,19 +194,18 @@ Journal entries are append-only JSONL and contain no credentials:
 ## 9. Dry-run deployment
 
 The existing API uses the normal V2 controller script and a configured
-credential profile. First copy the three controller package files into the
-API controller mount and start the separate plan mirror:
+credential profile. First copy the complete controller package into the API
+controller mount and start the separate plan mirror. The package includes the
+shared environment profile and mainnet fail-closed gates:
 
 ```bash
 STAGE5_ROOT=/Users/wilfred/Documents/Hummingbot/Derive-Options-Aware-Adaptive-Market-Maker-phase2-market-snapshot
 API_ROOT=/Users/wilfred/Documents/Hummingbot/hummingbot-api
 mkdir -p "$API_ROOT/bots/controllers/market_making/derive_adaptive_grid"
-cp "$STAGE5_ROOT/integrations/hummingbot/derive_adaptive_grid/derive_adaptive_grid.py" \
-  "$STAGE5_ROOT/integrations/hummingbot/derive_adaptive_grid/execution_logic.py" \
-  "$STAGE5_ROOT/integrations/hummingbot/derive_adaptive_grid/__init__.py" \
+cp -R "$STAGE5_ROOT/integrations/hummingbot/derive_adaptive_grid/." \
   "$API_ROOT/bots/controllers/market_making/derive_adaptive_grid/"
 
-PYTHONPATH="$STAGE5_ROOT/integrations/hummingbot" \
+PYTHONPATH="$STAGE5_ROOT/integrations/hummingbot:$STAGE5_ROOT/src:$STAGE5_ROOT" \
   "$STAGE5_ROOT/.venv/bin/python" "$STAGE5_ROOT/integrations/hummingbot/mirror_grid_plan.py" \
   --source /Users/wilfred/Documents/Hummingbot/condor/data/derive_grid_plans.jsonl \
   --target /Users/wilfred/Documents/Hummingbot/hummingbot-api/bots/instances/INSTANCE_NAME/data/derive_grid_plans.jsonl

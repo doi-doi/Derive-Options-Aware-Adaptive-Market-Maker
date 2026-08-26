@@ -16,8 +16,8 @@ from derive_adaptive_grid.execution_logic import (  # noqa: E402
     ReconciliationResult,
 )
 from derive_adaptive_grid.portfolio_config import (  # noqa: E402
-    BTC_HYPE_TRADING_PAIRS,
-    validate_btc_hype_pairs,
+    DEFAULT_TRADING_PAIRS,
+    validate_trading_pairs,
 )
 from derive_adaptive_grid.portfolio_execution import (  # noqa: E402
     PortfolioExecutionPolicy,
@@ -56,33 +56,36 @@ def _policy(**overrides: object) -> PortfolioExecutionPolicy:
         "max_active_executors_portfolio": 4,
         "collateral_safety_buffer_pct": Decimal("0"),
         "available_collateral": Decimal("1000"),
-        "betas": {"BTC-USDC": Decimal("1"), "HYPE-USDC": Decimal("1")},
+        "betas": {"BTC-USDC": Decimal("1"), "ETH-USDC": Decimal("1")},
     }
     values.update(overrides)
     values.pop("available_collateral", None)
     return PortfolioExecutionPolicy(**values)
 
 
-def test_btc_hype_scope_is_exact_and_ordered() -> None:
-    assert validate_btc_hype_pairs(BTC_HYPE_TRADING_PAIRS) == BTC_HYPE_TRADING_PAIRS
-    with pytest.raises(ValueError, match="exactly BTC-USDC and HYPE-USDC"):
-        validate_btc_hype_pairs(("BTC-USDC", "ETH-USDC"))
+def test_portfolio_scope_is_configurable_and_validated() -> None:
+    assert validate_trading_pairs(DEFAULT_TRADING_PAIRS) == ("BTC-USDC", "ETH-USDC")
+    assert validate_trading_pairs(("BTC-USDC", "SOL-USDC")) == ("BTC-USDC", "SOL-USDC")
+    with pytest.raises(ValueError, match="must be unique"):
+        validate_trading_pairs(("BTC-USDC", "BTC-USDC"))
+    with pytest.raises(ValueError, match="BASE-USDC format"):
+        validate_trading_pairs(("BTC-USDC", "ETH-PERP"))
 
 
 def test_portfolio_gate_applies_pair_and_portfolio_executor_caps() -> None:
     decision = evaluate_portfolio_risk(
         {
             "BTC-USDC": [_desired("buy_0", ExecutionSide.BUY)],
-            "HYPE-USDC": [_desired("buy_0", ExecutionSide.BUY)],
+            "ETH-USDC": [_desired("buy_0", ExecutionSide.BUY)],
         },
-        active_executors={"BTC-USDC": 1, "HYPE-USDC": 2},
+        active_executors={"BTC-USDC": 1, "ETH-USDC": 2},
         available_collateral=Decimal("1000"),
         policy=_policy(),
     )
 
     assert decision.allowed_level_ids["BTC-USDC"] == ("buy_0",)
-    assert decision.blocked_level_ids["HYPE-USDC"] == ("buy_0",)
-    assert "executor limit" in decision.blocked_reasons["HYPE-USDC"]["buy_0"]
+    assert decision.blocked_level_ids["ETH-USDC"] == ("buy_0",)
+    assert "executor limit" in decision.blocked_reasons["ETH-USDC"]["buy_0"]
 
 
 def test_risk_reducing_exit_remains_allowed_when_gross_limit_is_reached() -> None:
@@ -92,7 +95,7 @@ def test_risk_reducing_exit_remains_allowed_when_gross_limit_is_reached() -> Non
                 _desired("buy_0", ExecutionSide.BUY),
                 _desired("sell_0", ExecutionSide.SELL),
             ],
-            "HYPE-USDC": [],
+            "ETH-USDC": [],
         },
         positions={"BTC-USDC": Decimal("680")},
         available_collateral=Decimal("1000"),
@@ -114,8 +117,8 @@ def test_apply_portfolio_risk_removes_only_blocked_creates() -> None:
         ]
     )
     decision = evaluate_portfolio_risk(
-        {"BTC-USDC": result.creates, "HYPE-USDC": []},
-        active_executors={"BTC-USDC": 2, "HYPE-USDC": 0},
+        {"BTC-USDC": result.creates, "ETH-USDC": []},
+        active_executors={"BTC-USDC": 2, "ETH-USDC": 0},
         available_collateral=Decimal("1000"),
         policy=_policy(),
     )

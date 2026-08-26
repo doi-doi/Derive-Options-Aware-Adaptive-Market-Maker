@@ -1,0 +1,19 @@
+# Stage 9 dashboard overlay for existing Stage 8 strategy parameters.
+#
+# The current Condor monitor constructs MultiAssetConfig in-process and does
+# not hot-reload this file. The dashboard therefore labels these changes as
+# RESTART_REQUIRED and never treats this overlay as an execution command.
+
+btc_iv_weight: 0.25
+iv_stale_timeout_seconds: 15.0
+iv_missing_behavior: rv_only
+relationship_lookback_seconds: 3600.0
+rv_weight: 0.75
+transmitted_btc_iv_weight: 0.25
+direction_threshold: 0.25
+defensive_volatility_score: 1.5
+base_grid_width_pct: 0.01
+normal_levels_per_side: 5
+defensive_levels_per_side: 3
+defensive_width_multiplier: 1.5
+max_inventory_center_shift_bps: 30.0

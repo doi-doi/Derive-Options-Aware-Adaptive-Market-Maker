@@ -1,0 +1,496 @@
+{
+  "cases": {
+    "A_all_bullish": {
+      "allowed_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::buy_0"
+        ],
+        "SOL-USDC": [
+          "SOL-USDC::buy_0"
+        ]
+      },
+      "available_new_risk": 1100.0,
+      "blocked_level_ids": {
+        "HYPE-USDC": [
+          "HYPE-USDC::buy_0"
+        ]
+      },
+      "blocked_reason_counts": {
+        "MAX_NEW_RISK_CREATES": 1
+      },
+      "blocked_reasons": {
+        "HYPE-USDC::buy_0": "MAX_NEW_RISK_CREATES"
+      },
+      "collateral_reserve": 160.0,
+      "exposure": {
+        "btc_beta_equivalent_exposure": 0.0,
+        "gross_notional": 0.0,
+        "long_beta_exposure": 0.0,
+        "net_notional": 0.0,
+        "pending_buy_notional": {},
+        "pending_order_count": 0,
+        "pending_sell_notional": {},
+        "per_asset_exposure": {},
+        "per_asset_pending_order_count": {},
+        "short_beta_exposure": 0.0
+      },
+      "global_pause_new_exposure": false,
+      "preferred_new_risk": 900.0,
+      "reasons": [
+        "HYPE-USDC:buy:HYPE-USDC::buy_0:MAX_NEW_RISK_CREATES"
+      ],
+      "risk_create_cap_triggered": true,
+      "risk_increasing_creates": 2,
+      "risk_reducing_sides": {},
+      "state": {
+        "current_equity": 800.0,
+        "hard_stop_latched": false,
+        "reasons": [],
+        "risk_capacity_multiplier": 1.0,
+        "risk_stage": "NORMAL",
+        "session_drawdown_pct": 0.0,
+        "session_drawdown_quote": 0.0,
+        "session_pnl": 0.0,
+        "session_start_equity": 800.0
+      },
+      "timestamp": "2026-08-25T00:00:00Z",
+      "usable_collateral": 640.0
+    },
+    "B_all_three_buy_entries_filled": {
+      "allowed_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::sell_0"
+        ],
+        "HYPE-USDC": [
+          "HYPE-USDC::sell_0"
+        ],
+        "SOL-USDC": [
+          "SOL-USDC::sell_0"
+        ]
+      },
+      "available_new_risk": 500.0,
+      "blocked_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::buy_0"
+        ],
+        "HYPE-USDC": [
+          "HYPE-USDC::buy_0"
+        ],
+        "SOL-USDC": [
+          "SOL-USDC::buy_0"
+        ]
+      },
+      "blocked_reason_counts": {
+        "ASSET_HARD_INVENTORY": 1,
+        "PORTFOLIO_SOFT_BETA_LONG": 2
+      },
+      "blocked_reasons": {
+        "ETH-USDC::buy_0": "PORTFOLIO_SOFT_BETA_LONG",
+        "HYPE-USDC::buy_0": "ASSET_HARD_INVENTORY",
+        "SOL-USDC::buy_0": "PORTFOLIO_SOFT_BETA_LONG"
+      },
+      "collateral_reserve": 160.0,
+      "exposure": {
+        "btc_beta_equivalent_exposure": 600.0,
+        "gross_notional": 600.0,
+        "long_beta_exposure": 600.0,
+        "net_notional": 600.0,
+        "pending_buy_notional": {
+          "ETH-USDC": 0.0,
+          "HYPE-USDC": 0.0,
+          "SOL-USDC": 0.0
+        },
+        "pending_order_count": 0,
+        "pending_sell_notional": {
+          "ETH-USDC": 0.0,
+          "HYPE-USDC": 0.0,
+          "SOL-USDC": 0.0
+        },
+        "per_asset_exposure": {
+          "ETH-USDC": 200.0,
+          "HYPE-USDC": 200.0,
+          "SOL-USDC": 200.0
+        },
+        "per_asset_pending_order_count": {},
+        "short_beta_exposure": 0.0
+      },
+      "global_pause_new_exposure": false,
+      "preferred_new_risk": 300.0,
+      "reasons": [
+        "ETH-USDC:ASSET_DEFENSIVE_INVENTORY",
+        "SOL-USDC:ASSET_DEFENSIVE_INVENTORY",
+        "HYPE-USDC:ASSET_DEFENSIVE_INVENTORY",
+        "ETH-USDC:buy:ETH-USDC::buy_0:PORTFOLIO_SOFT_BETA_LONG",
+        "SOL-USDC:buy:SOL-USDC::buy_0:PORTFOLIO_SOFT_BETA_LONG",
+        "HYPE-USDC:buy:HYPE-USDC::buy_0:ASSET_HARD_INVENTORY"
+      ],
+      "risk_create_cap_triggered": false,
+      "risk_increasing_creates": 0,
+      "risk_reducing_sides": {
+        "ETH-USDC": [
+          "sell"
+        ],
+        "HYPE-USDC": [
+          "sell"
+        ],
+        "SOL-USDC": [
+          "sell"
+        ]
+      },
+      "state": {
+        "current_equity": 800.0,
+        "hard_stop_latched": false,
+        "reasons": [],
+        "risk_capacity_multiplier": 1.0,
+        "risk_stage": "NORMAL",
+        "session_drawdown_pct": 0.0,
+        "session_drawdown_quote": 0.0,
+        "session_pnl": 0.0,
+        "session_start_equity": 800.0
+      },
+      "timestamp": "2026-08-25T00:00:00Z",
+      "usable_collateral": 640.0
+    },
+    "C_portfolio_plus_700_beta_long": {
+      "allowed_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::sell_0"
+        ]
+      },
+      "available_new_risk": 400.0,
+      "blocked_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::buy_0"
+        ]
+      },
+      "blocked_reason_counts": {
+        "PORTFOLIO_SOFT_BETA_LONG": 1
+      },
+      "blocked_reasons": {
+        "ETH-USDC::buy_0": "PORTFOLIO_SOFT_BETA_LONG"
+      },
+      "collateral_reserve": 160.0,
+      "exposure": {
+        "btc_beta_equivalent_exposure": 700.0,
+        "gross_notional": 700.0,
+        "long_beta_exposure": 700.0,
+        "net_notional": 700.0,
+        "pending_buy_notional": {
+          "ETH-USDC": 0.0,
+          "HYPE-USDC": 0.0,
+          "SOL-USDC": 0.0
+        },
+        "pending_order_count": 0,
+        "pending_sell_notional": {
+          "ETH-USDC": 0.0,
+          "HYPE-USDC": 0.0,
+          "SOL-USDC": 0.0
+        },
+        "per_asset_exposure": {
+          "ETH-USDC": 180.0,
+          "HYPE-USDC": 280.0,
+          "SOL-USDC": 240.0
+        },
+        "per_asset_pending_order_count": {},
+        "short_beta_exposure": 0.0
+      },
+      "global_pause_new_exposure": false,
+      "preferred_new_risk": 200.0,
+      "reasons": [
+        "ETH-USDC:ASSET_SOFT_INVENTORY",
+        "ETH-USDC:buy:ETH-USDC::buy_0:PORTFOLIO_SOFT_BETA_LONG"
+      ],
+      "risk_create_cap_triggered": false,
+      "risk_increasing_creates": 0,
+      "risk_reducing_sides": {
+        "ETH-USDC": [
+          "sell"
+        ]
+      },
+      "state": {
+        "current_equity": 800.0,
+        "hard_stop_latched": false,
+        "reasons": [],
+        "risk_capacity_multiplier": 1.0,
+        "risk_stage": "NORMAL",
+        "session_drawdown_pct": 0.0,
+        "session_drawdown_quote": 0.0,
+        "session_pnl": 0.0,
+        "session_start_equity": 800.0
+      },
+      "timestamp": "2026-08-25T00:00:00Z",
+      "usable_collateral": 640.0
+    },
+    "D_portfolio_minus_700_beta_short": {
+      "allowed_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::buy_0"
+        ]
+      },
+      "available_new_risk": 400.0,
+      "blocked_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::sell_0"
+        ]
+      },
+      "blocked_reason_counts": {
+        "PORTFOLIO_SOFT_BETA_SHORT": 1
+      },
+      "blocked_reasons": {
+        "ETH-USDC::sell_0": "PORTFOLIO_SOFT_BETA_SHORT"
+      },
+      "collateral_reserve": 160.0,
+      "exposure": {
+        "btc_beta_equivalent_exposure": -700.0,
+        "gross_notional": 700.0,
+        "long_beta_exposure": 0.0,
+        "net_notional": -700.0,
+        "pending_buy_notional": {
+          "ETH-USDC": 0.0,
+          "HYPE-USDC": 0.0,
+          "SOL-USDC": 0.0
+        },
+        "pending_order_count": 0,
+        "pending_sell_notional": {
+          "ETH-USDC": 0.0,
+          "HYPE-USDC": 0.0,
+          "SOL-USDC": 0.0
+        },
+        "per_asset_exposure": {
+          "ETH-USDC": 180.0,
+          "HYPE-USDC": 280.0,
+          "SOL-USDC": 240.0
+        },
+        "per_asset_pending_order_count": {},
+        "short_beta_exposure": 700.0
+      },
+      "global_pause_new_exposure": false,
+      "preferred_new_risk": 200.0,
+      "reasons": [
+        "ETH-USDC:ASSET_SOFT_INVENTORY",
+        "ETH-USDC:sell:ETH-USDC::sell_0:PORTFOLIO_SOFT_BETA_SHORT"
+      ],
+      "risk_create_cap_triggered": false,
+      "risk_increasing_creates": 0,
+      "risk_reducing_sides": {
+        "ETH-USDC": [
+          "buy"
+        ]
+      },
+      "state": {
+        "current_equity": 800.0,
+        "hard_stop_latched": false,
+        "reasons": [],
+        "risk_capacity_multiplier": 1.0,
+        "risk_stage": "NORMAL",
+        "session_drawdown_pct": 0.0,
+        "session_drawdown_quote": 0.0,
+        "session_pnl": 0.0,
+        "session_start_equity": 800.0
+      },
+      "timestamp": "2026-08-25T00:00:00Z",
+      "usable_collateral": 640.0
+    },
+    "E_drawdown_minus_65": {
+      "allowed_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::buy_0"
+        ],
+        "SOL-USDC": [
+          "SOL-USDC::buy_0"
+        ]
+      },
+      "available_new_risk": 660.0,
+      "blocked_level_ids": {
+        "HYPE-USDC": [
+          "HYPE-USDC::buy_0"
+        ]
+      },
+      "blocked_reason_counts": {
+        "MAX_NEW_RISK_CREATES": 1
+      },
+      "blocked_reasons": {
+        "HYPE-USDC::buy_0": "MAX_NEW_RISK_CREATES"
+      },
+      "collateral_reserve": 160.0,
+      "exposure": {
+        "btc_beta_equivalent_exposure": 0.0,
+        "gross_notional": 0.0,
+        "long_beta_exposure": 0.0,
+        "net_notional": 0.0,
+        "pending_buy_notional": {},
+        "pending_order_count": 0,
+        "pending_sell_notional": {},
+        "per_asset_exposure": {},
+        "per_asset_pending_order_count": {},
+        "short_beta_exposure": 0.0
+      },
+      "global_pause_new_exposure": false,
+      "preferred_new_risk": 540.0,
+      "reasons": [
+        "COMPETITION_REDUCE",
+        "HYPE-USDC:buy:HYPE-USDC::buy_0:MAX_NEW_RISK_CREATES"
+      ],
+      "risk_create_cap_triggered": true,
+      "risk_increasing_creates": 2,
+      "risk_reducing_sides": {},
+      "state": {
+        "current_equity": 735.0,
+        "hard_stop_latched": false,
+        "reasons": [
+          "COMPETITION_REDUCE"
+        ],
+        "risk_capacity_multiplier": 0.6,
+        "risk_stage": "REDUCE",
+        "session_drawdown_pct": 0.08125,
+        "session_drawdown_quote": 65.0,
+        "session_pnl": -65.0,
+        "session_start_equity": 800.0
+      },
+      "timestamp": "2026-08-25T00:00:00Z",
+      "usable_collateral": 640.0
+    },
+    "F_drawdown_minus_85": {
+      "allowed_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::buy_0"
+        ],
+        "SOL-USDC": [
+          "SOL-USDC::buy_0"
+        ]
+      },
+      "available_new_risk": 440.0,
+      "blocked_level_ids": {
+        "HYPE-USDC": [
+          "HYPE-USDC::buy_0"
+        ]
+      },
+      "blocked_reason_counts": {
+        "MAX_NEW_RISK_CREATES": 1
+      },
+      "blocked_reasons": {
+        "HYPE-USDC::buy_0": "MAX_NEW_RISK_CREATES"
+      },
+      "collateral_reserve": 160.0,
+      "exposure": {
+        "btc_beta_equivalent_exposure": 0.0,
+        "gross_notional": 0.0,
+        "long_beta_exposure": 0.0,
+        "net_notional": 0.0,
+        "pending_buy_notional": {},
+        "pending_order_count": 0,
+        "pending_sell_notional": {},
+        "per_asset_exposure": {},
+        "per_asset_pending_order_count": {},
+        "short_beta_exposure": 0.0
+      },
+      "global_pause_new_exposure": false,
+      "preferred_new_risk": 360.0,
+      "reasons": [
+        "COMPETITION_DEFENSIVE",
+        "HYPE-USDC:buy:HYPE-USDC::buy_0:MAX_NEW_RISK_CREATES"
+      ],
+      "risk_create_cap_triggered": true,
+      "risk_increasing_creates": 2,
+      "risk_reducing_sides": {},
+      "state": {
+        "current_equity": 715.0,
+        "hard_stop_latched": false,
+        "reasons": [
+          "COMPETITION_DEFENSIVE"
+        ],
+        "risk_capacity_multiplier": 0.4,
+        "risk_stage": "DEFENSIVE",
+        "session_drawdown_pct": 0.10625,
+        "session_drawdown_quote": 85.0,
+        "session_pnl": -85.0,
+        "session_start_equity": 800.0
+      },
+      "timestamp": "2026-08-25T00:00:00Z",
+      "usable_collateral": 640.0
+    },
+    "G_drawdown_minus_101": {
+      "allowed_level_ids": {},
+      "available_new_risk": 0.0,
+      "blocked_level_ids": {
+        "ETH-USDC": [
+          "ETH-USDC::buy_0"
+        ],
+        "HYPE-USDC": [
+          "HYPE-USDC::buy_0"
+        ],
+        "SOL-USDC": [
+          "SOL-USDC::buy_0"
+        ]
+      },
+      "blocked_reason_counts": {
+        "COMPETITION_HARD_STOP": 3
+      },
+      "blocked_reasons": {
+        "ETH-USDC::buy_0": "COMPETITION_HARD_STOP",
+        "HYPE-USDC::buy_0": "COMPETITION_HARD_STOP",
+        "SOL-USDC::buy_0": "COMPETITION_HARD_STOP"
+      },
+      "collateral_reserve": 160.0,
+      "exposure": {
+        "btc_beta_equivalent_exposure": 0.0,
+        "gross_notional": 0.0,
+        "long_beta_exposure": 0.0,
+        "net_notional": 0.0,
+        "pending_buy_notional": {},
+        "pending_order_count": 0,
+        "pending_sell_notional": {},
+        "per_asset_exposure": {},
+        "per_asset_pending_order_count": {},
+        "short_beta_exposure": 0.0
+      },
+      "global_pause_new_exposure": true,
+      "preferred_new_risk": 0.0,
+      "reasons": [
+        "COMPETITION_HARD_STOP",
+        "ETH-USDC:buy:ETH-USDC::buy_0:COMPETITION_HARD_STOP",
+        "SOL-USDC:buy:SOL-USDC::buy_0:COMPETITION_HARD_STOP",
+        "HYPE-USDC:buy:HYPE-USDC::buy_0:COMPETITION_HARD_STOP"
+      ],
+      "risk_create_cap_triggered": false,
+      "risk_increasing_creates": 0,
+      "risk_reducing_sides": {},
+      "state": {
+        "current_equity": 699.0,
+        "hard_stop_latched": true,
+        "reasons": [
+          "COMPETITION_HARD_STOP"
+        ],
+        "risk_capacity_multiplier": 0.0,
+        "risk_stage": "HARD_STOP_NEW_RISK",
+        "session_drawdown_pct": 0.12625,
+        "session_drawdown_quote": 101.0,
+        "session_pnl": -101.0,
+        "session_start_equity": 800.0
+      },
+      "timestamp": "2026-08-25T00:00:00Z",
+      "usable_collateral": 640.0
+    },
+    "H_small_five_second_plan_movement": {
+      "keep": [
+        "buy_0"
+      ],
+      "keep_reasons": {
+        "buy_0": "MODE_CHANGE_WITHIN_DEADBAND_KEEP"
+      },
+      "pass": true,
+      "stops": []
+    }
+  },
+  "pass": true,
+  "pass_flags": {
+    "A_all_bullish": true,
+    "B_all_three_buy_entries_filled": true,
+    "C_portfolio_plus_700_beta_long": true,
+    "D_portfolio_minus_700_beta_short": true,
+    "E_drawdown_minus_65": true,
+    "F_drawdown_minus_85": true,
+    "G_drawdown_minus_101": true,
+    "H_small_five_second_plan_movement": true
+  }
+}

@@ -14,10 +14,17 @@ from dataclasses import dataclass
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from typing import Any
 
-MAINNET_CONNECTOR_NAME = "derive_perpetual"
-TESTNET_CONNECTOR_NAME = "derive_perpetual_testnet"
-MAINNET_DOMAIN = "derive_perpetual"
-TESTNET_DOMAIN = "derive_perpetual_testnet"
+from derive_options_mm.environment import (
+    MAINNET_CONNECTOR_NAME,
+    MAINNET_DOMAIN,
+    TESTNET_CONNECTOR_NAME,
+    TESTNET_DOMAIN,
+    DeriveEnvironmentProfile,
+    environment_for_connector,
+    environment_profile,
+    normalize_environment,
+)
+
 MAINNET_CHAIN_ID = 957
 MAINNET_REST_URL = "https://api.lyra.finance"
 MAINNET_WS_URL = "wss://api.lyra.finance/ws"
@@ -34,29 +41,6 @@ def _decimal(value: Any) -> Decimal | None:
     except (InvalidOperation, TypeError, ValueError):
         return None
     return parsed if parsed.is_finite() else None
-
-
-def normalize_environment(value: Any) -> str:
-    """Normalize the environment labels used by the four data boundaries."""
-
-    normalized = str(value or "").strip().lower()
-    if normalized in {"mainnet", "production", "prod", "live"}:
-        return "mainnet"
-    if normalized in {"testnet", "demo", "sandbox"}:
-        return "testnet"
-    return "unknown"
-
-
-def environment_for_connector(connector_name: Any, domain: Any = None) -> str:
-    """Return the environment implied by a connector name/domain pair."""
-
-    connector = str(connector_name or "").strip().lower()
-    connector_domain = str(domain or "").strip().lower()
-    if connector == MAINNET_CONNECTOR_NAME and connector_domain in {"", MAINNET_DOMAIN}:
-        return "mainnet"
-    if connector == TESTNET_CONNECTOR_NAME and connector_domain in {"", TESTNET_DOMAIN}:
-        return "testnet"
-    return "unknown"
 
 
 @dataclass(frozen=True)
@@ -360,6 +344,7 @@ def config_canary_risk_limits(values: Mapping[str, Any]) -> CanaryRiskLimits:
 __all__ = [
     "CanaryOrderSize",
     "CanaryRiskLimits",
+    "DeriveEnvironmentProfile",
     "EnvironmentConsistency",
     "MAINNET_CANARY_ACK",
     "MAINNET_CHAIN_ID",
@@ -374,6 +359,7 @@ __all__ = [
     "check_environment_consistency",
     "config_canary_risk_limits",
     "environment_for_connector",
+    "environment_profile",
     "existing_account_blockers",
     "mainnet_canary_authorized",
     "mainnet_canary_blockers",

@@ -94,7 +94,7 @@ Hummingbot package:
 
 ```bash
 # Run inside the installed Hummingbot API container, with REPO mounted at /repo.
-PYTHONPATH=/repo/integrations/hummingbot:/repo \
+PYTHONPATH=/repo/integrations/hummingbot:/repo/src:/repo \
   python /repo/tools/simulate_stage5f_lifecycle.py
 ```
 
@@ -115,15 +115,21 @@ The generated report directories are intentionally retained for review. Do not
 discard an audit or overwrite a live evidence log merely to make a summary look
 cleaner.
 
-## 7. Stage 5 boundary
+## 7. Stage 5 environment boundary
 
 The Hummingbot controller and its testnet example are in
 `integrations/hummingbot/derive_adaptive_grid/`. The example is fail-closed with
 `execution_enabled=false`, `allow_mainnet_trading=false`, `post_only=true`, and one
-level per side. A live run needs separately authorized testnet credentials, a running
+level per side. The controller uses the canonical environment profile in
+`src/derive_options_mm/environment.py`; the dashboard's Environment page can stage
+the testnet or mainnet connector/domain selection, but it always turns execution off
+and requires a controller restart. Mainnet remains a read-only/canary posture in the
+dashboard and needs the separate fail-closed mainnet template plus explicit gates.
+
+A live testnet run needs separately authorized testnet credentials, a running
 Hummingbot/Docker API, and a readback of collateral, hard position limits, order IDs,
 post-only status, and cleanup. Follow the evidence boundary in
 [LIVE_EVIDENCE.md](LIVE_EVIDENCE.md) and [reports/stage5_execution.md](../reports/stage5_execution.md).
 
-No mainnet command is provided by this package. Never place credentials in a report,
+No mainnet trading command is provided by this package. Never place credentials in a report,
 README, shell history, or committed `.env` file.

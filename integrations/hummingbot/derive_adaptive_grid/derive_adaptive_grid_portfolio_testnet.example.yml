@@ -1,4 +1,4 @@
-# BTC/HYPE portfolio controller — testnet dry-run template.
+# Configurable Derive portfolio controller — testnet dry-run template.
 # Execution stays disabled until a separate, explicit canary rollout.
 id: derive_adaptive_grid_portfolio_testnet
 controller_name: derive_adaptive_grid_portfolio
@@ -8,7 +8,7 @@ connector_name: derive_perpetual_testnet
 trading_pair: BTC-USDC
 trading_pairs:
   - BTC-USDC
-  - HYPE-USDC
+  - ETH-USDC
 environment: testnet
 market_environment: testnet
 options_environment: testnet
@@ -23,10 +23,11 @@ execution_enabled: false
 execution_max_levels_per_side: 1
 post_only: true
 testnet_order_scales_by_pair:
-  # Minimum scales for the current Derive testnet rules and plan prices:
-  # BTC 0.01 base minimum, HYPE 10 base minimum.
+  # Execution-only scale for the current Derive testnet rules and plan prices.
+  # BTC and ETH testnet scales are execution-only; Stage 4 theoretical
+  # allocations are unchanged.
   BTC-USDC: 7.95
-  HYPE-USDC: 8.3
+  ETH-USDC: 3
 
 grid_plan_path: /home/hummingbot/data/derive_grid_plans.jsonl
 execution_journal_path: /home/hummingbot/data/derive_execution_events.jsonl
@@ -34,30 +35,32 @@ replay_existing_plan: true
 
 pair_max_total_position_notional:
   BTC-USDC: 1800
-  HYPE-USDC: 1800
+  ETH-USDC: 2200
 pair_max_side_position_notional:
   BTC-USDC: 900
-  HYPE-USDC: 900
+  ETH-USDC: 1100
 pair_max_active_executors: 2
 pair_max_active_grid_levels: 2
 
-portfolio_max_gross_notional: 1800
+# BTC and ETH one-level-per-side entries together remain below this cap;
+# collateral and per-asset/side limits remain independently enforced.
+portfolio_max_gross_notional: 4000
 portfolio_soft_beta_exposure: 1600
 portfolio_hard_beta_exposure: 2000
 portfolio_max_long_beta_exposure: 2000
 portfolio_max_short_beta_exposure: 2000
-portfolio_per_asset_max_position_notional: 1800
+portfolio_per_asset_max_position_notional: 2200
 portfolio_max_active_executors: 4
 portfolio_collateral_safety_buffer_pct: 0.20
 portfolio_betas:
   BTC-USDC: 1
-  HYPE-USDC: 1
+  ETH-USDC: 1
 
-minimum_order_lifetime_seconds: 30
-minimum_replace_interval_seconds: 0
+minimum_order_lifetime_seconds: 60
+minimum_replace_interval_seconds: 30
 maximum_order_lifetime_seconds: 600
-refresh_price_tolerance_bps: 5
-refresh_amount_tolerance_pct: 0.05
+refresh_price_tolerance_bps: 15
+refresh_amount_tolerance_pct: 0.15
 max_consecutive_order_errors: 3
 order_error_pause_seconds: 60
 stale_plan_timeout_seconds: 30

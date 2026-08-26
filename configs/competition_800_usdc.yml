@@ -1,0 +1,84 @@
+# 48-hour competition profile — Derive Adaptive State Grid
+#
+# This committed profile is deliberately execution-disabled. It is a
+# testnet-only risk/dry-run configuration; an operator acknowledgement is
+# required outside this file before any later execution rollout.
+
+profile_name: 48-hour competition profile
+duration_hours: 48
+starting_equity_reference: 800
+collateral_reserve_pct: 0.20
+
+market_environment: testnet
+connector_name: derive_perpetual_testnet
+allow_mainnet_trading: false
+execution_enabled: false
+post_only: true
+leverage: 2
+
+enabled_markets:
+  - ETH-USDC
+  - SOL-USDC
+  - HYPE-USDC
+signal_markets:
+  - BTC-USDC
+btc_execution_enabled: false
+btc_signal_enabled: true
+
+portfolio_soft_gross_notional: 900
+portfolio_max_gross_notional: 1100
+portfolio_soft_beta_exposure: 600
+portfolio_hard_beta_exposure: 800
+portfolio_max_long_beta_exposure: 800
+portfolio_max_short_beta_exposure: 800
+
+asset_limits:
+  ETH-USDC:
+    soft_position_notional: 200
+    max_position_notional: 280
+  SOL-USDC:
+    soft_position_notional: 200
+    max_position_notional: 280
+  HYPE-USDC:
+    soft_position_notional: 160
+    max_position_notional: 220
+
+capital_allocation_pct:
+  ETH-USDC: 0.35
+  SOL-USDC: 0.35
+  HYPE-USDC: 0.30
+
+target_order_notional: 70
+max_single_order_notional: 100
+max_levels_per_side_per_asset: 1
+max_active_executors_per_asset: 2
+max_active_executors_portfolio: 6
+max_new_risk_creates_per_controller_cycle: 2
+
+# Existing Stage 3 allocation behavior remains the source of truth.
+normal_buy_allocation_pct: 0.50
+long_bias_buy_allocation_pct: 0.60
+short_bias_buy_allocation_pct: 0.40
+maximum_directional_bias_pct: 0.65
+
+inventory_soft_ratio: 0.50
+inventory_defensive_ratio: 0.70
+inventory_hard_ratio: 0.90
+defensive_capital_multiplier: 0.50
+
+drawdown_caution_quote: 40
+drawdown_reduce_quote: 60
+drawdown_defensive_quote: 80
+competition_hard_drawdown_quote: 100
+risk_capacity_multipliers:
+  NORMAL: 1.0
+  CAUTION: 0.80
+  REDUCE: 0.60
+  DEFENSIVE: 0.40
+  HARD_STOP_NEW_RISK: 0.0
+
+minimum_order_lifetime_seconds: 120
+minimum_replace_interval_seconds: 60
+refresh_price_tolerance_bps: 12
+refresh_amount_tolerance_pct: 0.15
+maximum_order_lifetime_seconds: 900

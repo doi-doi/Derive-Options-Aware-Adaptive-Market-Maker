@@ -3,11 +3,37 @@
 An options-aware adaptive grid for Derive perpetuals, implemented as an evidence-first
 research and execution prototype for Hummingbot V2.
 
-> **Hackathon status:** Stage 1--6.5 are complete. Stage 5 proved a constrained,
+> **Hackathon status:** Stage 1--8 are implemented as a testnet-only research and
+> dry-run boundary. Stage 5 proved a constrained,
 > one-level-per-side Derive testnet maker lifecycle up to safe cancellation and
 > replacement. Stage 6.5 provides a deterministic replay and audit. A natural live
 > maker fill was not observed, so this repository makes no live profitability, fill,
 > take-profit, or inventory-feedback claim.
+
+Stage 8 adds a four-asset dry-run coordinator for `BTC-USDC`, `ETH-USDC`,
+`SOL-USDC`, and `HYPE-USDC`. BTC ATM IV is a single shared global risk input;
+realized volatility, direction, inventory, rolling BTC relationships, modes, and
+theoretical plans remain asset-local. A portfolio governor evaluates gross, net,
+beta-equivalent, pending, and per-asset exposure before any future execution
+adapter. Execution remains disabled and mainnet remains rejected. See
+[the Stage 8 runbook](docs/STAGE8_MULTI_ASSET.md) and the generated
+[Stage 8 dry-run report](reports/stage8_multi_asset.md).
+
+The Hummingbot portfolio execution adapter accepts configurable `BASE-USDC`
+pairs. See [Derive asset switching](docs/DERIVE_ASSET_SWITCHING.md) for the
+safe stop, reconfigure, and restart workflow used to change the live testnet
+asset without inheriting stale orders or unverified pair limits.
+
+Stage 9 adds a local Streamlit control panel for the existing Condor state: it
+stages and validates configuration, shows risk/order-size consequences, previews
+Stage 4 grid changes, estimates historical KEEP/REFRESH/NEW/REMOVED behavior,
+records redacted history, and detects source-file drift. It has no exchange client
+and cannot place or cancel orders. The current Condor monitor builds its Stage 8
+configuration at process start, so applied dashboard changes are explicitly marked
+`RESTART_REQUIRED`; the Environment page can stage either network, but generated
+controller artifacts remain execution-disabled and mainnet trading remains rejected.
+See the
+[Stage 9 dashboard guide](docs/dashboard.md) and [Stage 9 report](reports/stage9_condor_dashboard.md).
 
 ## The one-minute explanation
 
@@ -260,6 +286,11 @@ export CONDOR_DATA_DIR=/Users/wilfred/Documents/Hummingbot/condor/data
 # Safe presentation check: reads local files only.
 ./scripts/demo.sh
 
+# Optional local Stage 9 control panel; reads Condor JSONL and writes only local
+# configuration/history files. It does not contact Derive.
+python -m pip install -e '.[dashboard]'
+./scripts/run_dashboard.sh
+
 # Reproducibility checks.
 pytest -q
 ruff check .
@@ -290,11 +321,44 @@ strategy logic. The example controller config is fail-closed:
 `execution_enabled=false`, `allow_mainnet_trading=false`, `post_only=true`, and
 `execution_max_levels_per_side=1`.
 
+### Stage 10 bounded self-tuning observer
+
+Stage 10 currently implements Phase 1 only: a deterministic observer over the
+existing Condor JSONL streams. It runs in `SUGGEST_ONLY`, preserves unsupported
+live metrics as `UNKNOWN`, labels offline replay as `SHADOW_REPLAY`, and never
+mutates configuration or calls an exchange. Open the `SELF-TUNING` page at
+`http://localhost:8501` or run the artifact command directly:
+
+```bash
+.venv/bin/python tools/run_stage10_observer.py \
+  --data-dir /Users/wilfred/Documents/Hummingbot/condor/data
+```
+
+See [reports/stage10_self_tuning.md](reports/stage10_self_tuning.md) for the
+phase boundary, evidence status, and deferred diagnosis/promotion work.
+
+### Stage 11 Phase A measurement
+
+Stage 11 currently stops at measurement. `VolumeEfficiencyMetrics` reuses the
+existing observer's event/state contract to count actual fills, time-weighted
+risk/inventory, cycles, quote lifetime, markout, capture, fees, and drawdown.
+It does not optimize or mutate execution. Generate local artifacts with:
+
+```bash
+.venv/bin/python tools/run_stage11_measurement.py \
+  --data-dir /Users/wilfred/Documents/Hummingbot/condor/data
+```
+
+See [reports/stage11_volume_efficiency.md](reports/stage11_volume_efficiency.md)
+for the evidence stop and `UNKNOWN` handling.
+
 ## Project structure
 
 ```text
 src/derive_options_mm/                 Stage 1--4 state and grid engine
 evaluation/                             Stage 6 replay and Stage 6.5 audit
+evaluation/self_tuning_observer.py      Stage 10 Phase 1 performance observer
+tools/run_stage11_measurement.py        Stage 11 Phase A measurement command
 integrations/condor/                    Condor routines and read-only data bridge
 integrations/hummingbot/                Stage 5 V2 controller and compatibility shims
 tests/                                  unit, integration, and lifecycle tests
@@ -303,6 +367,8 @@ scripts/demo.sh                         safe judge/demo entry point
 reports/stage5_execution.md             live testnet evidence and boundary
 reports/stage6/                         comparison charts and replay outputs
 reports/stage6_5/                       canonical audit and ablation outputs
+reports/stage10/                        Stage 10 observer supportability outputs
+reports/stage11/                        Stage 11 Phase A measurement outputs
 docs/                                   judge, demo, pitch, FAQ, and submission docs
 ```
 
@@ -325,7 +391,8 @@ docs/                                   judge, demo, pitch, FAQ, and submission 
 
 - Live Derive maker fills, live take-profit fills, live realized PnL, live inventory
   feedback, queue position, profitability, or production execution quality.
-- Mainnet access or mainnet trading.
+- Mainnet trading or live mainnet execution. The dashboard supports only a
+  fail-closed read-only mainnet configuration for connectivity review.
 - Out-of-sample performance, statistical significance, or robustness across market
   regimes.
 - ML/LLM decision loops or a claim that options IV forecasts direction.
@@ -336,7 +403,8 @@ The next safe research step is a separately authorized, controlled testnet fill
 experiment with a counterparty or a documented exchange-side test mechanism. It must
 preserve the one-level cap, testnet-only guard, post-only behavior, and full audit
 trail. Only after a fill-dependent lifecycle is evidenced should the project consider
-more levels or broader replay design. Mainnet is out of scope for this package.
+more levels or broader replay design. Mainnet trading remains out of scope for this
+package.
 
 ## Submission checklist
 

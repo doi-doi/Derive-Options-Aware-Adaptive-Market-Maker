@@ -43,14 +43,18 @@ depth to 2 or 5 levels.
 
 ## Where is the dashboard?
 
-The safe demo is a terminal state card, while the report directory contains SVG
-charts and JSON/CSV artifacts. This final package does not add a new networked
-dashboard or imply that a chart is a live trading control panel.
+Run `./scripts/run_dashboard.sh` and open `http://localhost:8501`. The local
+dashboard reads Condor streams and local YAML only; it does not place or cancel
+orders. Its Environment page can stage a testnet or mainnet read-only profile,
+but applied changes require the normal Hummingbot controller restart.
 
 ## Can I run this against mainnet?
 
-Not as packaged. Mainnet is explicitly disabled and no mainnet command is provided.
-Any future change would require a separate authorization and review.
+The dashboard can stage the Derive mainnet connector for read-only connectivity
+review and generates a fail-closed controller artifact. It does not authorize
+mainnet trading: execution and `allow_mainnet_trading` remain off, and a real
+mainnet canary still requires the separate controller gates, account verification,
+risk budgets, and explicit human authorization.
 
 ## Are the fill and take-profit tests live?
 

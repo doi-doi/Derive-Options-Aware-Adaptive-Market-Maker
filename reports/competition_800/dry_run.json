@@ -1,0 +1,285 @@
+{
+  "account": {
+    "available_collateral": 800.0,
+    "equity": 800.0,
+    "position_count": 0,
+    "positions": {},
+    "source": "authenticated_local_hummingbot_api"
+  },
+  "btc_execution_eligibility": {
+    "btc_price": 78970.0,
+    "competition_max_single_order": 100.0,
+    "execution": "SIGNAL ONLY",
+    "message": "BTC EXECUTION DISABLED \u2014 SIGNAL ONLY",
+    "min_order": 0.01,
+    "minimum_valid_notional": 789.7
+  },
+  "candidates": {
+    "ETH-USDC": {
+      "actual_target_notional": 246.8,
+      "buy": {
+        "actual_target_notional": 246.8,
+        "desired_base_amount": 0.028363047001620744,
+        "eligible": false,
+        "max_single_order_notional": 100.0,
+        "minimum_valid_amount": 0.1,
+        "minimum_valid_notional": 246.8,
+        "quantized_base_amount": 0.03,
+        "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+        "target_order_notional": 70.0,
+        "trading_pair": "ETH-USDC"
+      },
+      "desired_base_amount": 0.028363047001620744,
+      "minimum_valid_amount": 0.1,
+      "minimum_valid_notional": 246.8,
+      "price": 2468.0,
+      "quantized_base_amount": 0.03,
+      "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+      "sell": {
+        "actual_target_notional": 246.8,
+        "desired_base_amount": 0.028363047001620744,
+        "eligible": false,
+        "max_single_order_notional": 100.0,
+        "minimum_valid_amount": 0.1,
+        "minimum_valid_notional": 246.8,
+        "quantized_base_amount": 0.03,
+        "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+        "target_order_notional": 70.0,
+        "trading_pair": "ETH-USDC"
+      },
+      "status": "BLOCKED"
+    },
+    "HYPE-USDC": {
+      "actual_target_notional": 796.9717706061407,
+      "buy": {
+        "actual_target_notional": 796.9717706061407,
+        "desired_base_amount": 0.8783247108835632,
+        "eligible": false,
+        "max_single_order_notional": 100.0,
+        "minimum_valid_amount": 10.0,
+        "minimum_valid_notional": 796.9717706061407,
+        "quantized_base_amount": 1.0,
+        "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+        "target_order_notional": 70.0,
+        "trading_pair": "HYPE-USDC"
+      },
+      "desired_base_amount": 0.8783247108835632,
+      "minimum_valid_amount": 10.0,
+      "minimum_valid_notional": 796.9717706061407,
+      "price": 79.69717706061407,
+      "quantized_base_amount": 1.0,
+      "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+      "sell": {
+        "actual_target_notional": 796.9717706061407,
+        "desired_base_amount": 0.8783247108835632,
+        "eligible": false,
+        "max_single_order_notional": 100.0,
+        "minimum_valid_amount": 10.0,
+        "minimum_valid_notional": 796.9717706061407,
+        "quantized_base_amount": 1.0,
+        "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+        "target_order_notional": 70.0,
+        "trading_pair": "HYPE-USDC"
+      },
+      "status": "BLOCKED"
+    },
+    "SOL-USDC": {
+      "actual_target_notional": 74.065,
+      "buy": {
+        "actual_target_notional": 74.065,
+        "desired_base_amount": 0.9451157766826437,
+        "eligible": true,
+        "max_single_order_notional": 100.0,
+        "minimum_valid_amount": 1.0,
+        "minimum_valid_notional": 74.065,
+        "quantized_base_amount": 1.0,
+        "reason": "",
+        "target_order_notional": 70.0,
+        "trading_pair": "SOL-USDC"
+      },
+      "desired_base_amount": 0.9451157766826437,
+      "minimum_valid_amount": 1.0,
+      "minimum_valid_notional": 74.065,
+      "price": 74.065,
+      "quantized_base_amount": 1.0,
+      "reason": "",
+      "sell": {
+        "actual_target_notional": 74.065,
+        "desired_base_amount": 0.9451157766826437,
+        "eligible": true,
+        "max_single_order_notional": 100.0,
+        "minimum_valid_amount": 1.0,
+        "minimum_valid_notional": 74.065,
+        "quantized_base_amount": 1.0,
+        "reason": "",
+        "target_order_notional": 70.0,
+        "trading_pair": "SOL-USDC"
+      },
+      "status": "ELIGIBLE"
+    }
+  },
+  "collateral": {
+    "after_reserve": 640.0,
+    "available": 800.0,
+    "margin_requirement_if_all_minimum_candidates_fill": 1117.8367706061408,
+    "reserve": 160.0
+  },
+  "exchange_rules": {
+    "BTC-USDC": {
+      "amount_step": 0.0001,
+      "best_ask": 79170.0,
+      "best_bid": 78770.0,
+      "index_price": 78985.3,
+      "instrument_name": "BTC-PERP",
+      "mark_price": 78959.48299268348,
+      "minimum_amount": 0.01,
+      "minimum_notional": 0.0,
+      "observed_at": "2026-08-25T13:35:01Z",
+      "price_increment": 0.1,
+      "reference_price": 78970.0,
+      "trading_pair": "BTC-USDC"
+    },
+    "ETH-USDC": {
+      "amount_step": 0.01,
+      "best_ask": 2469.0,
+      "best_bid": 2467.0,
+      "index_price": 2470.55,
+      "instrument_name": "ETH-PERP",
+      "mark_price": 2469.1716935848885,
+      "minimum_amount": 0.1,
+      "minimum_notional": 0.0,
+      "observed_at": "2026-08-25T13:35:01Z",
+      "price_increment": 0.01,
+      "reference_price": 2468.0,
+      "trading_pair": "ETH-USDC"
+    },
+    "HYPE-USDC": {
+      "amount_step": 1.0,
+      "best_ask": null,
+      "best_bid": null,
+      "index_price": 79.693,
+      "instrument_name": "HYPE-PERP",
+      "mark_price": 79.69717706061407,
+      "minimum_amount": 10.0,
+      "minimum_notional": 0.0,
+      "observed_at": "2026-08-25T13:35:03Z",
+      "price_increment": 0.001,
+      "reference_price": 79.69717706061407,
+      "trading_pair": "HYPE-USDC"
+    },
+    "SOL-USDC": {
+      "amount_step": 0.1,
+      "best_ask": 74.27,
+      "best_bid": 73.86,
+      "index_price": 97.78,
+      "instrument_name": "SOL-PERP",
+      "mark_price": 97.83670588125814,
+      "minimum_amount": 1.0,
+      "minimum_notional": 0.0,
+      "observed_at": "2026-08-25T13:35:02Z",
+      "price_increment": 0.01,
+      "reference_price": 74.065,
+      "trading_pair": "SOL-USDC"
+    }
+  },
+  "portfolio_if_all_minimum_candidates_fill": {
+    "gross_notional": 2235.6735412122816,
+    "long_beta_worst_case_all_buys": 1117.8367706061408,
+    "note": "Uses conservative beta fallback magnitude 1.0 until measured relationships are valid.",
+    "short_beta_worst_case_all_sells": 1117.8367706061408
+  },
+  "risk_decision": {
+    "allowed_level_ids": {
+      "SOL-USDC": [
+        "SOL-USDC::buy_0",
+        "SOL-USDC::sell_0"
+      ]
+    },
+    "available_new_risk": 1100.0,
+    "blocked_level_ids": {},
+    "blocked_reason_counts": {},
+    "blocked_reasons": {},
+    "collateral_reserve": 160.0,
+    "exposure": {
+      "btc_beta_equivalent_exposure": 0.0,
+      "gross_notional": 0.0,
+      "long_beta_exposure": 0.0,
+      "net_notional": 0.0,
+      "pending_buy_notional": {},
+      "pending_order_count": 0,
+      "pending_sell_notional": {},
+      "per_asset_exposure": {},
+      "per_asset_pending_order_count": {},
+      "short_beta_exposure": 0.0
+    },
+    "global_pause_new_exposure": false,
+    "preferred_new_risk": 900.0,
+    "reasons": [],
+    "risk_create_cap_triggered": false,
+    "risk_increasing_creates": 2,
+    "risk_reducing_sides": {},
+    "state": {
+      "current_equity": 800.0,
+      "hard_stop_latched": false,
+      "reasons": [],
+      "risk_capacity_multiplier": 1.0,
+      "risk_stage": "NORMAL",
+      "session_drawdown_pct": 0.0,
+      "session_drawdown_quote": 0.0,
+      "session_pnl": 0.0,
+      "session_start_equity": 800.0
+    },
+    "timestamp": "2026-08-25T13:35:04Z",
+    "usable_collateral": 640.0
+  },
+  "sizing": {
+    "BTC-USDC": {
+      "actual_target_notional": 789.7,
+      "desired_base_amount": 0.0008864125617323034,
+      "eligible": false,
+      "max_single_order_notional": 100.0,
+      "minimum_valid_amount": 0.01,
+      "minimum_valid_notional": 789.7,
+      "quantized_base_amount": 0.0009000000000000001,
+      "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+      "target_order_notional": 70.0,
+      "trading_pair": "BTC-USDC"
+    },
+    "ETH-USDC": {
+      "actual_target_notional": 246.8,
+      "desired_base_amount": 0.028363047001620744,
+      "eligible": false,
+      "max_single_order_notional": 100.0,
+      "minimum_valid_amount": 0.1,
+      "minimum_valid_notional": 246.8,
+      "quantized_base_amount": 0.03,
+      "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+      "target_order_notional": 70.0,
+      "trading_pair": "ETH-USDC"
+    },
+    "HYPE-USDC": {
+      "actual_target_notional": 796.9717706061407,
+      "desired_base_amount": 0.8783247108835632,
+      "eligible": false,
+      "max_single_order_notional": 100.0,
+      "minimum_valid_amount": 10.0,
+      "minimum_valid_notional": 796.9717706061407,
+      "quantized_base_amount": 1.0,
+      "reason": "MIN_ORDER_EXCEEDS_BUDGET",
+      "target_order_notional": 70.0,
+      "trading_pair": "HYPE-USDC"
+    },
+    "SOL-USDC": {
+      "actual_target_notional": 74.065,
+      "desired_base_amount": 0.9451157766826437,
+      "eligible": true,
+      "max_single_order_notional": 100.0,
+      "minimum_valid_amount": 1.0,
+      "minimum_valid_notional": 74.065,
+      "quantized_base_amount": 1.0,
+      "reason": "",
+      "target_order_notional": 70.0,
+      "trading_pair": "SOL-USDC"
+    }
+  }
+}

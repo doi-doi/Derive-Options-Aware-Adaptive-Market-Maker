@@ -1,0 +1,58 @@
+{
+  "BTC-USDC": {
+    "amount_step": 0.0001,
+    "best_ask": 79170.0,
+    "best_bid": 78770.0,
+    "index_price": 78985.3,
+    "instrument_name": "BTC-PERP",
+    "mark_price": 78959.48299268348,
+    "minimum_amount": 0.01,
+    "minimum_notional": 0.0,
+    "observed_at": "2026-08-25T13:35:01Z",
+    "price_increment": 0.1,
+    "reference_price": 78970.0,
+    "trading_pair": "BTC-USDC"
+  },
+  "ETH-USDC": {
+    "amount_step": 0.01,
+    "best_ask": 2469.0,
+    "best_bid": 2467.0,
+    "index_price": 2470.55,
+    "instrument_name": "ETH-PERP",
+    "mark_price": 2469.1716935848885,
+    "minimum_amount": 0.1,
+    "minimum_notional": 0.0,
+    "observed_at": "2026-08-25T13:35:01Z",
+    "price_increment": 0.01,
+    "reference_price": 2468.0,
+    "trading_pair": "ETH-USDC"
+  },
+  "HYPE-USDC": {
+    "amount_step": 1.0,
+    "best_ask": null,
+    "best_bid": null,
+    "index_price": 79.693,
+    "instrument_name": "HYPE-PERP",
+    "mark_price": 79.69717706061407,
+    "minimum_amount": 10.0,
+    "minimum_notional": 0.0,
+    "observed_at": "2026-08-25T13:35:03Z",
+    "price_increment": 0.001,
+    "reference_price": 79.69717706061407,
+    "trading_pair": "HYPE-USDC"
+  },
+  "SOL-USDC": {
+    "amount_step": 0.1,
+    "best_ask": 74.27,
+    "best_bid": 73.86,
+    "index_price": 97.78,
+    "instrument_name": "SOL-PERP",
+    "mark_price": 97.83670588125814,
+    "minimum_amount": 1.0,
+    "minimum_notional": 0.0,
+    "observed_at": "2026-08-25T13:35:02Z",
+    "price_increment": 0.01,
+    "reference_price": 74.065,
+    "trading_pair": "SOL-USDC"
+  }
+}

@@ -19,12 +19,15 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 _PROJECT_SRC = Path(__file__).resolve().parents[2] / "src"
 if str(_PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(_PROJECT_SRC))
 
+from derive_options_mm.environment import (  # noqa: E402
+    environment_profile,
+)
 from derive_options_mm.options_iv import (  # noqa: E402
     DeriveOptionsProvider,
     OptionsVolatilitySnapshot,
@@ -47,6 +50,10 @@ class Config(BaseModel):
     trading_pair: str = Field(
         default="BTC-USDC",
         description="Hummingbot pair mapped by the connector from Derive BTC-PERP",
+    )
+    market_environment: str = Field(
+        default="testnet",
+        description="Environment label retained in every asset-scoped record",
     )
     book_depth_levels: int = Field(
         default=5,
@@ -107,11 +114,11 @@ class Config(BaseModel):
         description="Read the public Derive BTC options surface for ATM IV",
     )
     options_environment: str = Field(
-        default="production",
+        default="testnet",
         description="Environment label for the public Derive options source",
     )
     options_api_base_url: str = Field(
-        default="https://api.lyra.finance",
+        default="https://api-demo.lyra.finance",
         description="Official Derive public API base URL for option data",
     )
     options_currency: str = Field(
@@ -152,6 +159,26 @@ class Config(BaseModel):
         description="Broad upper sanity bound for decimal IV values",
     )
 
+    @model_validator(mode="after")
+    def validate_environment_boundaries(self) -> Config:
+        profile = environment_profile(self.market_environment)
+        if self.connector_name != profile.connector_name:
+            raise ValueError(
+                "connector_name must match market_environment: "
+                f"expected {profile.connector_name!r}"
+            )
+        if self.options_environment != profile.options_environment:
+            raise ValueError(
+                "options_environment must match market_environment: "
+                f"expected {profile.options_environment!r}"
+            )
+        if self.options_api_base_url.rstrip("/") != profile.options_api_base_url:
+            raise ValueError(
+                "options_api_base_url must match market_environment: "
+                f"expected {profile.options_api_base_url!r}"
+            )
+        return self
+
 
 class MarketDataError(RuntimeError):
     """Raised when an input cannot be normalized safely."""
@@ -163,6 +190,7 @@ class MarketSnapshot(BaseModel):
     timestamp: str
     connector: str
     trading_pair: str
+    market_environment: str = "testnet"
     book_depth_levels: int
     order_book_timestamp: str | None = None
 
@@ -550,6 +578,7 @@ def _snapshot_from_inputs(
         timestamp=_iso_utc(now),
         connector=config.connector_name,
         trading_pair=config.trading_pair,
+        market_environment=config.market_environment,
         book_depth_levels=config.book_depth_levels,
         order_book_timestamp=features.order_book_timestamp if features else None,
         best_bid=_float_or_none(features.best_bid) if features else None,
