@@ -170,6 +170,20 @@ class GridPlan(BaseModel):
     plan_change_significant: bool = False
     plan_version: int = Field(default=0, ge=0)
 
+    # Stage 13 strategy-regime pause observability.  These fields do not
+    # change Stage 4 prices, allocations, widths, or level counts; they let
+    # the execution boundary distinguish a pending soft pause from a
+    # confirmed safety pause.
+    pause_candidate_active: bool = False
+    pause_candidate_reason: str | None = None
+    pause_candidate_category: str | None = None
+    pause_candidate_age_seconds: float | None = None
+    pause_confirmation_seconds: float = 0.0
+    pause_confirmed: bool = False
+    recovery_candidate: GridMode | None = None
+    recovery_candidate_age_seconds: float | None = None
+    recovery_confirmation_seconds: float = 0.0
+
     def to_record(self) -> dict[str, Any]:
         """Return a JSON-friendly record without changing internal Decimal use."""
 
@@ -962,6 +976,25 @@ def build_grid_plan(
             valid=True,
             confidence=confidence,
             reasons=reasons,
+            pause_candidate_active=bool(
+                _read(mode_decision, "pause_candidate_active", False)
+            ),
+            pause_candidate_reason=_read(mode_decision, "pause_candidate_reason"),
+            pause_candidate_category=_read(mode_decision, "pause_candidate_category"),
+            pause_candidate_age_seconds=_read(
+                mode_decision, "pause_candidate_age_seconds"
+            ),
+            pause_confirmation_seconds=float(
+                _read(mode_decision, "pause_confirmation_seconds", 0.0) or 0.0
+            ),
+            pause_confirmed=bool(_read(mode_decision, "pause_confirmed", False)),
+            recovery_candidate=_read(mode_decision, "recovery_candidate"),
+            recovery_candidate_age_seconds=_read(
+                mode_decision, "recovery_candidate_age_seconds"
+            ),
+            recovery_confirmation_seconds=float(
+                _read(mode_decision, "recovery_confirmation_seconds", 0.0) or 0.0
+            ),
         )
         validation_errors = validate_grid_plan(candidate)
         if validation_errors:

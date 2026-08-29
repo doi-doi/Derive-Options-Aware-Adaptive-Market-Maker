@@ -11,3 +11,10 @@ dist/
 
 # Generated audit snapshots are intentionally reviewable only when explicitly added.
 artifacts/phase1/generated-*.json
+data/shadow_execution_events.jsonl
+data/shadow_execution.sqlite3
+data/stage13_shadow_execution_events.jsonl
+data/stage13_shadow_execution.sqlite3
+reports/shadow_sessions/
+reports/shadow_baseline/
+reports/stage14/

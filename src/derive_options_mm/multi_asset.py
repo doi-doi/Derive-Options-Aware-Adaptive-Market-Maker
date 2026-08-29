@@ -158,6 +158,7 @@ class MultiAssetConfig(BaseModel):
     """Shared configuration for the four-asset dry-run architecture."""
 
     market_environment: Literal["testnet", "mainnet"] = "testnet"
+    execution_mode: Literal["TESTNET", "LIVE", "SHADOW", "REPLAY"] = "TESTNET"
     supported_markets: tuple[str, ...] = SUPPORTED_TRADING_PAIRS
     enabled_markets: tuple[str, ...] = SUPPORTED_TRADING_PAIRS
     global_options: GlobalRiskSettings = Field(default_factory=GlobalRiskSettings)
@@ -171,6 +172,8 @@ class MultiAssetConfig(BaseModel):
     execution_enabled: bool = False
     allow_mainnet_trading: bool = False
     per_asset_max_levels_per_side: int = Field(default=1, ge=1)
+    execution_status_by_market: dict[str, str] = Field(default_factory=dict)
+    use_incremental_pending_exposure_for_reconciliation: bool = False
 
     @model_validator(mode="after")
     def validate_safe_scope(self) -> MultiAssetConfig:
@@ -180,14 +183,31 @@ class MultiAssetConfig(BaseModel):
             raise ValueError("at least one market must be enabled")
         if not enabled.issubset(supported):
             raise ValueError("enabled_markets must be a subset of supported_markets")
+        invalid_statuses = set(self.execution_status_by_market.values()) - {
+            "EXECUTION_ENABLED",
+            "SIGNAL_ONLY",
+            "SIGNAL_ONLY_MIN_SIZE",
+            "DISABLED",
+        }
+        if invalid_statuses:
+            raise ValueError(f"unsupported execution status: {sorted(invalid_statuses)}")
+        if not set(self.execution_status_by_market).issubset(supported):
+            raise ValueError("execution status keys must be supported markets")
         if BTC_TRADING_PAIR not in supported:
             raise ValueError("BTC-USDC must remain a supported market")
         if self.global_options.source_pair != BTC_TRADING_PAIR:
             raise ValueError("global options source must remain BTC-USDC")
-        if self.market_environment == "mainnet" or self.allow_mainnet_trading:
-            raise ValueError("Stage 8 is testnet-only; mainnet must remain disabled")
+        if self.market_environment == "mainnet" and self.execution_mode != "SHADOW":
+            raise ValueError(
+                "mainnet market data is allowed only with execution_mode=SHADOW; "
+                "mainnet order execution remains a separate authorization boundary"
+            )
+        if self.execution_mode == "SHADOW" and self.market_environment != "mainnet":
+            raise ValueError("execution_mode=SHADOW requires market_environment=mainnet")
+        if self.execution_mode == "SHADOW" and self.allow_mainnet_trading:
+            raise ValueError("shadow mode must not enable allow_mainnet_trading")
         if self.execution_enabled:
-            raise ValueError("Stage 8 development config must keep execution disabled")
+            raise ValueError("multi-asset development config must keep execution disabled")
         if self.local_rv_weight == 0 and self.transmitted_btc_iv_weight == 0:
             raise ValueError("at least one volatility component must be enabled")
         return self
@@ -291,7 +311,12 @@ class PortfolioRiskDecision(BaseModel):
     blocked_level_ids: dict[str, list[str]] = Field(default_factory=dict)
     active_executors: int = 0
     per_asset_active_executors: dict[str, int] = Field(default_factory=dict)
+    active_executor_input_count: int = 0
+    pending_executor_count: int = 0
+    active_pending_executor_overlap_count: int = 0
+    pre_proposal_active_executors: int = 0
     executor_cap_triggered: bool = False
+    risk_delta_audit: list[dict[str, Any]] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
 
 
@@ -954,6 +979,31 @@ class PortfolioRiskGovernor:
             }
         return result
 
+    @staticmethod
+    def _normalise_existing_entries(
+        existing_entries: Mapping[str, Any] | None,
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        result: dict[str, dict[str, dict[str, Any]]] = {}
+        for pair, raw_levels in (existing_entries or {}).items():
+            if not isinstance(raw_levels, Mapping):
+                continue
+            pair_levels: dict[str, dict[str, Any]] = {}
+            for level_id, raw in raw_levels.items():
+                if isinstance(raw, Mapping):
+                    notional = _finite(
+                        raw.get("notional", raw.get("quote_notional"))
+                    ) or 0.0
+                    side = str(raw.get("side", "")).lower() or None
+                else:
+                    notional = _finite(raw) or 0.0
+                    side = None
+                pair_levels[str(level_id)] = {
+                    "notional": max(0.0, notional),
+                    "side": side,
+                }
+            result[str(pair)] = pair_levels
+        return result
+
     def _base_exposure(
         self,
         positions: Mapping[str, Any] | None,
@@ -994,6 +1044,8 @@ class PortfolioRiskGovernor:
         proposed_entries: Mapping[str, Sequence[ProposedEntry | Mapping[str, Any]]] | None = None,
         betas: Mapping[str, Any] | None = None,
         active_executors: Mapping[str, Any] | None = None,
+        existing_entries: Mapping[str, Any] | None = None,
+        use_incremental_pending_exposure: bool = False,
     ) -> PortfolioRiskDecision:
         """Evaluate current plus pending exposure and proposed entry sides."""
 
@@ -1014,7 +1066,9 @@ class PortfolioRiskGovernor:
         risk_reducing: dict[str, list[str]] = {}
         allowed_ids: dict[str, list[str]] = {}
         blocked_ids: dict[str, list[str]] = {}
+        risk_delta_audit: list[dict[str, Any]] = []
         reasons: list[str] = []
+        existing_by_pair = self._normalise_existing_entries(existing_entries)
         current_positions = {
             str(pair): _finite(value) or 0.0
             for pair, value in (positions or {}).items()
@@ -1028,13 +1082,83 @@ class PortfolioRiskGovernor:
         working_asset_exposure = dict(asset_exposure)
         working_gross = gross
         working_beta = beta_value
+        active_executor_input_count = sum(
+            int(_finite(value) or 0.0) for value in (active_executors or {}).values()
+        )
+        pending_executor_count = sum(
+            int(values.get("count", 0.0)) for values in pending.values()
+        )
+        active_pending_executor_overlap_count = sum(
+            min(
+                int(_finite((active_executors or {}).get(pair)) or 0.0),
+                int(values.get("count", 0.0)),
+            )
+            for pair, values in pending.items()
+        )
         working_asset_executors = {
             pair: int(_finite((active_executors or {}).get(pair)) or 0.0)
             + int(pending.get(pair, {}).get("count", 0.0))
             for pair in set(asset_exposure) | set(pending) | set(active_executors or {})
         }
         working_portfolio_executors = sum(working_asset_executors.values())
+        pre_proposal_active_executors = working_portfolio_executors
         executor_cap_triggered = False
+        if use_incremental_pending_exposure:
+            proposed_ids_by_pair = {
+                str(pair): {
+                    entry.level_id
+                    for raw in raw_entries
+                    for entry in [
+                        raw
+                        if isinstance(raw, ProposedEntry)
+                        else ProposedEntry.model_validate(raw)
+                    ]
+                }
+                for pair, raw_entries in (proposed_entries or {}).items()
+            }
+            for pair, level_rows in existing_by_pair.items():
+                for level_id, existing in level_rows.items():
+                    if level_id in proposed_ids_by_pair.get(pair, set()):
+                        continue
+                    released = float(existing.get("notional", 0.0) or 0.0)
+                    if released <= _EPSILON:
+                        continue
+                    side = str(existing.get("side") or "").lower()
+                    beta = _finite((betas or {}).get(pair))
+                    beta = 1.0 if beta is None else beta
+                    before_asset = working_asset_exposure.get(pair, 0.0)
+                    before_gross = working_gross
+                    working_asset_exposure[pair] = max(0.0, before_asset - released)
+                    working_gross = max(0.0, working_gross - released)
+                    if side == "buy":
+                        working_beta -= released * beta
+                    elif side == "sell":
+                        working_beta += released * beta
+                    working_asset_executors[pair] = max(
+                        0, working_asset_executors.get(pair, 0) - 1
+                    )
+                    working_portfolio_executors = max(0, working_portfolio_executors - 1)
+                    risk_delta_audit.append(
+                        {
+                            "timestamp": timestamp,
+                            "trading_pair": pair,
+                            "level_id": level_id,
+                            "side": side or None,
+                            "action": "CANCEL_RELEASE",
+                            "existing_notional": released,
+                            "proposed_notional": 0.0,
+                            "notional_delta": -released,
+                            "new_executor": False,
+                            "risk_reducing": True,
+                            "allowed": True,
+                            "blocked_reason": None,
+                            "asset_exposure_before": before_asset,
+                            "asset_exposure_after": working_asset_exposure[pair],
+                            "gross_exposure_before": before_gross,
+                            "gross_exposure_after": working_gross,
+                            "beta_exposure_after": working_beta,
+                        }
+                    )
         for pair, raw_entries in (proposed_entries or {}).items():
             normalised: list[ProposedEntry] = []
             for raw in raw_entries:
@@ -1043,21 +1167,39 @@ class PortfolioRiskGovernor:
             allowed: list[str] = []
             blocked: list[str] = []
             for entry in normalised:
-                position = current_positions.get(pair, 0.0)
+                filled_position = _finite((positions or {}).get(pair)) or 0.0
+                position = (
+                    filled_position
+                    if use_incremental_pending_exposure
+                    else current_positions.get(pair, 0.0)
+                )
                 beta = _finite((betas or {}).get(pair))
                 beta = 1.0 if beta is None else beta
-                signed_delta = entry.quote_notional * beta * (1.0 if entry.side == "buy" else -1.0)
+                existing = existing_by_pair.get(str(pair), {}).get(entry.level_id)
+                existing_notional = (
+                    float(existing.get("notional", 0.0) or 0.0)
+                    if existing is not None
+                    else 0.0
+                )
+                delta = (
+                    entry.quote_notional - existing_notional
+                    if use_incremental_pending_exposure and existing is not None
+                    else entry.quote_notional
+                )
+                signed_delta = delta * beta * (1.0 if entry.side == "buy" else -1.0)
                 risk_reducing_entry = (
-                    (position > _EPSILON and entry.side == "sell")
-                    or (position < -_EPSILON and entry.side == "buy")
+                    (filled_position > _EPSILON and entry.side == "sell")
+                    or (filled_position < -_EPSILON and entry.side == "buy")
+                    or delta <= _EPSILON
                 )
                 if risk_reducing_entry:
                     risk_reducing.setdefault(pair, []).append(entry.side)
                 candidate_asset = (
                     working_asset_exposure.get(pair, abs(position))
-                    + entry.quote_notional
+                    + delta
                 )
-                candidate_gross = working_gross + entry.quote_notional
+                candidate_asset = max(0.0, candidate_asset)
+                candidate_gross = max(0.0, working_gross + delta)
                 candidate_beta = working_beta + signed_delta
                 candidate_long = max(0.0, candidate_beta)
                 candidate_short = max(0.0, -candidate_beta)
@@ -1111,8 +1253,41 @@ class PortfolioRiskGovernor:
                     working_asset_exposure[pair] = candidate_asset
                     working_gross = candidate_gross
                     working_beta = candidate_beta
-                    working_asset_executors[pair] = working_asset_executors.get(pair, 0) + 1
-                    working_portfolio_executors += 1
+                    is_new_executor = existing is None
+                    if is_new_executor:
+                        working_asset_executors[pair] = working_asset_executors.get(pair, 0) + 1
+                        working_portfolio_executors += 1
+                if block_reason:
+                    is_new_executor = False
+                if existing is None:
+                    action = "CREATE"
+                elif delta > _EPSILON:
+                    action = "RESIZE_UP"
+                elif delta < -_EPSILON:
+                    action = "RESIZE_DOWN"
+                else:
+                    action = "KEEP"
+                risk_delta_audit.append(
+                    {
+                        "timestamp": timestamp,
+                        "trading_pair": pair,
+                        "level_id": entry.level_id,
+                        "side": entry.side,
+                        "action": action,
+                        "existing_notional": existing_notional if existing is not None else 0.0,
+                        "proposed_notional": entry.quote_notional,
+                        "notional_delta": delta,
+                        "new_executor": is_new_executor,
+                        "risk_reducing": risk_reducing_entry,
+                        "allowed": not bool(block_reason),
+                        "blocked_reason": block_reason or None,
+                        "asset_exposure_before": candidate_asset - delta,
+                        "asset_exposure_after": candidate_asset,
+                        "gross_exposure_before": candidate_gross - delta,
+                        "gross_exposure_after": candidate_gross,
+                        "beta_exposure_after": candidate_beta,
+                    }
+                )
                 if block_reason and "executor" in block_reason:
                     executor_cap_triggered = True
             if allowed:
@@ -1157,7 +1332,12 @@ class PortfolioRiskGovernor:
             blocked_level_ids=blocked_ids,
             active_executors=working_portfolio_executors,
             per_asset_active_executors=working_asset_executors,
+            active_executor_input_count=active_executor_input_count,
+            pending_executor_count=pending_executor_count,
+            active_pending_executor_overlap_count=active_pending_executor_overlap_count,
+            pre_proposal_active_executors=pre_proposal_active_executors,
             executor_cap_triggered=executor_cap_triggered,
+            risk_delta_audit=risk_delta_audit,
             reasons=list(dict.fromkeys(reasons)),
         )
 
@@ -1169,6 +1349,9 @@ class PortfolioRiskGovernor:
         pending_entries: Mapping[str, Any] | None = None,
         betas: Mapping[str, Any] | None = None,
         active_executors: Mapping[str, Any] | None = None,
+        existing_entries: Mapping[str, Any] | None = None,
+        execution_status_by_market: Mapping[str, str] | None = None,
+        use_incremental_pending_exposure: bool = False,
     ) -> tuple[PortfolioRiskDecision, dict[str, PortfolioPlanRoute]]:
         """Return pair-scoped allowed/blocked levels for later Stage 5 routing."""
 
@@ -1186,12 +1369,28 @@ class PortfolioRiskGovernor:
             proposed_entries=proposals,
             betas=betas,
             active_executors=active_executors,
+            existing_entries=existing_entries,
+            use_incremental_pending_exposure=use_incremental_pending_exposure,
         )
         routes: dict[str, PortfolioPlanRoute] = {}
         for pair, entries in proposals.items():
             all_ids = [entry.level_id for entry in entries]
-            allowed = tuple(decision.allowed_level_ids.get(pair, []))
-            blocked = tuple(decision.blocked_level_ids.get(pair, []))
+            allowed_ids = list(decision.allowed_level_ids.get(pair, []))
+            blocked_ids = list(decision.blocked_level_ids.get(pair, []))
+            status = str((execution_status_by_market or {}).get(pair, "EXECUTION_ENABLED"))
+            if status != "EXECUTION_ENABLED":
+                blocked_ids.extend(level_id for level_id in all_ids if level_id not in blocked_ids)
+                allowed_ids = []
+                decision.allowed_level_ids.pop(pair, None)
+                decision.blocked_level_ids[pair] = list(dict.fromkeys(blocked_ids))
+                decision.blocked_pairs = sorted(set([*decision.blocked_pairs, pair]))
+                decision.blocked_sides[pair] = sorted(
+                    set(decision.blocked_sides.get(pair, []))
+                    | {entry.side for entry in entries}
+                )
+                decision.reasons.append(f"{pair} {status}: execution route disabled")
+            allowed = tuple(dict.fromkeys(allowed_ids))
+            blocked = tuple(dict.fromkeys(blocked_ids))
             routes[pair] = PortfolioPlanRoute(
                 trading_pair=pair,
                 allowed_level_ids=allowed,
@@ -1199,7 +1398,7 @@ class PortfolioRiskGovernor:
                 blocked_sides=tuple(decision.blocked_sides.get(pair, [])),
                 executor_namespace=f"{pair}::",
             )
-            if not allowed and not blocked and all_ids:
+            if not allowed and not blocked and all_ids and status == "EXECUTION_ENABLED":
                 routes[pair] = routes[pair].model_copy(update={"allowed_level_ids": tuple(all_ids)})
         return decision, routes
 
@@ -1268,6 +1467,7 @@ class MultiAssetCoordinator:
         pending_entries: Mapping[str, Any] | None = None,
         global_risk_state: GlobalRiskState | None = None,
         active_executors: Mapping[str, Any] | None = None,
+        existing_entries: Mapping[str, Any] | None = None,
     ) -> MultiAssetCycle:
         state_result = self.state_engine.update(
             snapshots,
@@ -1317,6 +1517,11 @@ class MultiAssetCoordinator:
             pending_entries=pending_entries,
             betas=beta_values,
             active_executors=active_executors,
+            existing_entries=existing_entries,
+            execution_status_by_market=self.config.execution_status_by_market,
+            use_incremental_pending_exposure=(
+                self.config.use_incremental_pending_exposure_for_reconciliation
+            ),
         )
         timestamp = state_result.global_risk.timestamp
         portfolio = portfolio.model_copy(update={"timestamp": timestamp})

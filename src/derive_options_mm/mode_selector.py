@@ -53,6 +53,8 @@ class ModeSelectorConfig(BaseModel):
     minimum_mode_duration_seconds: float = Field(default=10.0, ge=0)
     pause_recovery_samples: int = Field(default=3, ge=1)
     pause_recovery_seconds: float = Field(default=0.0, ge=0)
+    strategy_pause_entry_confirm_seconds: float = Field(default=0.0, ge=0, le=30)
+    strategy_pause_exit_confirm_seconds: float = Field(default=0.0, ge=0, le=30)
     defensive_exit_confirmation_samples: int = Field(default=2, ge=1)
 
     @model_validator(mode="after")
@@ -103,6 +105,18 @@ class GridModeDecision(BaseModel):
     valid: bool
     reasons: list[str] = Field(default_factory=list)
     recommended_profile: str
+    pause_candidate_active: bool = False
+    pause_candidate_reason: str | None = None
+    pause_candidate_category: str | None = None
+    pause_candidate_since_seconds: float | None = None
+    pause_candidate_age_seconds: float | None = None
+    pause_confirmation_seconds: float = 0.0
+    pause_confirmed: bool = False
+    pause_active_category: str | None = None
+    recovery_candidate: GridMode | None = None
+    recovery_candidate_since_seconds: float | None = None
+    recovery_candidate_age_seconds: float | None = None
+    recovery_confirmation_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -111,6 +125,7 @@ class ModeEvaluation:
 
     mode: GridMode
     reasons: tuple[str, ...]
+    pause_category: str = "STRATEGY_REGIME"
 
 
 _PROFILE_BY_MODE = {
@@ -147,11 +162,15 @@ def determine_candidate_mode(
     cfg = config or ModeSelectorConfig()
 
     if not state.state_valid:
-        return ModeEvaluation(GridMode.PAUSE, ("market state invalid",))
+        return ModeEvaluation(
+            GridMode.PAUSE,
+            ("market state invalid",),
+            "DATA_CRITICAL",
+        )
 
     confidence = _finite(state.confidence)
     if confidence is None:
-        return ModeEvaluation(GridMode.PAUSE, ("confidence unavailable",))
+        return ModeEvaluation(GridMode.PAUSE, ("confidence unavailable",), "DATA_CRITICAL")
     if confidence < cfg.critical_confidence:
         return ModeEvaluation(
             GridMode.PAUSE,
@@ -159,11 +178,12 @@ def determine_candidate_mode(
                 f"confidence {confidence:.2f} below critical threshold "
                 f"{cfg.critical_confidence:.2f}",
             ),
+            "DATA_CRITICAL",
         )
 
     inventory_ratio = _finite(state.inventory_ratio)
     if state.inventory_state is InventoryState.UNKNOWN or inventory_ratio is None:
-        return ModeEvaluation(GridMode.PAUSE, ("inventory data unavailable",))
+        return ModeEvaluation(GridMode.PAUSE, ("inventory data unavailable",), "HARD_RISK")
     if abs(inventory_ratio) >= cfg.inventory_hard_limit:
         return ModeEvaluation(
             GridMode.PAUSE,
@@ -171,11 +191,12 @@ def determine_candidate_mode(
                 f"inventory ratio {_signed(inventory_ratio)} exceeds hard limit "
                 f"+/-{cfg.inventory_hard_limit:.2f}",
             ),
+            "HARD_RISK",
         )
 
     volatility_score = _finite(state.volatility_score)
     if volatility_score is None or volatility_score < 0:
-        return ModeEvaluation(GridMode.PAUSE, ("volatility score unavailable",))
+        return ModeEvaluation(GridMode.PAUSE, ("volatility score unavailable",), "DATA_CRITICAL")
     if volatility_score >= cfg.extreme_volatility_score:
         return ModeEvaluation(
             GridMode.PAUSE,
@@ -183,9 +204,14 @@ def determine_candidate_mode(
                 f"extreme volatility score {volatility_score:.2f} reaches pause "
                 f"threshold {cfg.extreme_volatility_score:.2f}",
             ),
+            "STRATEGY_REGIME",
         )
     if state.volatility_state is VolatilityState.INITIALIZING:
-        return ModeEvaluation(GridMode.PAUSE, ("volatility state initializing",))
+        return ModeEvaluation(
+            GridMode.PAUSE,
+            ("volatility state initializing",),
+            "DATA_CRITICAL",
+        )
 
     defensive_reasons: list[str] = []
     if state.volatility_state is VolatilityState.HIGH:
@@ -333,6 +359,14 @@ class ModeSelector:
         self._mode_entered_at: float | None = None
         self._last_timestamp_seconds: float | None = None
         self._pause_safe_since: float | None = None
+        self._pause_candidate_reason: str | None = None
+        self._pause_candidate_category: str | None = None
+        self._pause_candidate_since: float | None = None
+        self._pause_candidate_count = 0
+        self._pause_active_category: str | None = None
+        self._recovery_candidate: GridMode | None = None
+        self._recovery_candidate_since: float | None = None
+        self._recovery_candidate_count = 0
 
     @property
     def current_mode(self) -> GridMode | None:
@@ -346,9 +380,52 @@ class ModeSelector:
     def candidate_count(self) -> int:
         return self._candidate_count
 
+    @property
+    def pause_candidate_reason(self) -> str | None:
+        return self._pause_candidate_reason
+
+    @property
+    def pause_candidate_category(self) -> str | None:
+        return self._pause_candidate_category
+
+    @property
+    def pause_candidate_since(self) -> float | None:
+        return self._pause_candidate_since
+
+    @property
+    def pause_candidate_count(self) -> int:
+        return self._pause_candidate_count
+
+    @property
+    def recovery_candidate(self) -> GridMode | None:
+        return self._recovery_candidate
+
+    @property
+    def recovery_candidate_since(self) -> float | None:
+        return self._recovery_candidate_since
+
+    @property
+    def recovery_candidate_count(self) -> int:
+        return self._recovery_candidate_count
+
+    @property
+    def pause_active_category(self) -> str | None:
+        return self._pause_active_category
+
     def _reset_candidate(self) -> None:
         self._candidate_mode = None
         self._candidate_count = 0
+
+    def _reset_pause_candidate(self) -> None:
+        self._pause_candidate_reason = None
+        self._pause_candidate_category = None
+        self._pause_candidate_since = None
+        self._pause_candidate_count = 0
+
+    def _reset_recovery_candidate(self) -> None:
+        self._recovery_candidate = None
+        self._recovery_candidate_since = None
+        self._recovery_candidate_count = 0
 
     def _track_candidate(self, mode: GridMode) -> int:
         if self._candidate_mode is mode:
@@ -366,11 +443,40 @@ class ModeSelector:
             >= self.config.minimum_mode_duration_seconds
         )
 
-    def _activate(self, mode: GridMode, timestamp_seconds: float) -> None:
+    def _activate(
+        self,
+        mode: GridMode,
+        timestamp_seconds: float,
+        *,
+        pause_category: str | None = None,
+    ) -> None:
         self._current_mode = mode
         self._mode_entered_at = timestamp_seconds
         self._reset_candidate()
         self._pause_safe_since = None
+        self._reset_pause_candidate()
+        self._reset_recovery_candidate()
+        self._pause_active_category = pause_category if mode is GridMode.PAUSE else None
+
+    def _track_pause_candidate(
+        self,
+        evaluation: ModeEvaluation,
+        timestamp_seconds: float,
+    ) -> tuple[int, float]:
+        reason = evaluation.reasons[0] if evaluation.reasons else "strategy-regime pause"
+        if (
+            self._pause_candidate_reason != reason
+            or self._pause_candidate_category != evaluation.pause_category
+        ):
+            self._pause_candidate_reason = reason
+            self._pause_candidate_category = evaluation.pause_category
+            self._pause_candidate_since = timestamp_seconds
+            self._pause_candidate_count = 1
+        else:
+            self._pause_candidate_count += 1
+        since = self._pause_candidate_since
+        elapsed = timestamp_seconds - (since if since is not None else timestamp_seconds)
+        return self._pause_candidate_count, max(0.0, elapsed)
 
     def _decision(
         self,
@@ -378,8 +484,26 @@ class ModeSelector:
         *,
         previous_mode: GridMode | None,
         reasons: list[str],
+        pause_confirmed: bool | None = None,
+        recovery_confirmation_seconds: float | None = None,
     ) -> GridModeDecision:
         assert self._current_mode is not None
+        timestamp_seconds = parse_timestamp(state.timestamp)
+        if timestamp_seconds is None:
+            timestamp_seconds = self._last_timestamp_seconds
+        pause_age = None
+        if self._pause_candidate_since is not None and timestamp_seconds is not None:
+            pause_age = max(0.0, timestamp_seconds - self._pause_candidate_since)
+        recovery_age = None
+        if self._recovery_candidate_since is not None and timestamp_seconds is not None:
+            recovery_age = max(0.0, timestamp_seconds - self._recovery_candidate_since)
+        if pause_confirmed is None:
+            pause_confirmed = self._current_mode is GridMode.PAUSE
+        exit_confirmation = (
+            self.config.pause_recovery_seconds
+            if recovery_confirmation_seconds is None
+            else recovery_confirmation_seconds
+        )
         return GridModeDecision(
             timestamp=state.timestamp,
             trading_pair=state.trading_pair,
@@ -396,6 +520,18 @@ class ModeSelector:
             valid=state.state_valid,
             reasons=_dedupe(reasons),
             recommended_profile=_PROFILE_BY_MODE[self._current_mode],
+            pause_candidate_active=self._pause_candidate_reason is not None,
+            pause_candidate_reason=self._pause_candidate_reason,
+            pause_candidate_category=self._pause_candidate_category,
+            pause_candidate_since_seconds=self._pause_candidate_since,
+            pause_candidate_age_seconds=pause_age,
+            pause_confirmation_seconds=self.config.strategy_pause_entry_confirm_seconds,
+            pause_confirmed=pause_confirmed,
+            pause_active_category=self._pause_active_category,
+            recovery_candidate=self._recovery_candidate,
+            recovery_candidate_since_seconds=self._recovery_candidate_since,
+            recovery_candidate_age_seconds=recovery_age,
+            recovery_confirmation_seconds=exit_confirmation,
         )
 
     def _force_pause(
@@ -403,17 +539,60 @@ class ModeSelector:
         state: MarketState,
         reasons: list[str],
         timestamp_seconds: float | None,
+        pause_category: str = "DATA_CRITICAL",
     ) -> GridModeDecision:
         previous_mode = self._current_mode
         if timestamp_seconds is None:
             timestamp_seconds = self._mode_entered_at
         if timestamp_seconds is None:
             timestamp_seconds = 0.0
-        self._activate(GridMode.PAUSE, timestamp_seconds)
+        self._activate(
+            GridMode.PAUSE,
+            timestamp_seconds,
+            pause_category=pause_category,
+        )
         return self._decision(
             state,
             previous_mode=previous_mode,
             reasons=[*reasons, "PAUSE is an immediate safety mode"],
+            pause_confirmed=True,
+        )
+
+    def _pending_strategy_pause(
+        self,
+        state: MarketState,
+        evaluation: ModeEvaluation,
+        timestamp_seconds: float,
+    ) -> GridModeDecision:
+        count, elapsed = self._track_pause_candidate(evaluation, timestamp_seconds)
+        threshold = self.config.strategy_pause_entry_confirm_seconds
+        if elapsed >= threshold:
+            reasons = [
+                *evaluation.reasons,
+                f"STRATEGY_REGIME PAUSE confirmed after {elapsed:.1f}s",
+            ]
+            previous_mode = self._current_mode
+            self._activate(
+                GridMode.PAUSE,
+                timestamp_seconds,
+                pause_category=evaluation.pause_category,
+            )
+            return self._decision(
+                state,
+                previous_mode=previous_mode,
+                reasons=reasons,
+                pause_confirmed=True,
+            )
+        reasons = [
+            *evaluation.reasons,
+            f"STRATEGY_REGIME PAUSE confirmation pending: "
+            f"{elapsed:.1f}/{threshold:.1f}s ({count} observations)",
+        ]
+        return self._decision(
+            state,
+            previous_mode=self._current_mode,
+            reasons=reasons,
+            pause_confirmed=False,
         )
 
     def _pause_recovery(
@@ -432,6 +611,7 @@ class ModeSelector:
         if evaluation.mode not in recoverable_modes:
             self._reset_candidate()
             self._pause_safe_since = None
+            self._reset_recovery_candidate()
             return self._decision(
                 state,
                 previous_mode=previous_mode,
@@ -444,10 +624,22 @@ class ModeSelector:
         count = self._track_candidate(evaluation.mode)
         if self._pause_safe_since is None:
             self._pause_safe_since = timestamp_seconds
+        if self._recovery_candidate is not evaluation.mode:
+            self._recovery_candidate = evaluation.mode
+            self._recovery_candidate_since = timestamp_seconds
+            self._recovery_candidate_count = 1
+        else:
+            self._recovery_candidate_count += 1
         elapsed = timestamp_seconds - self._pause_safe_since
+        recovery_threshold = max(
+            self.config.pause_recovery_seconds,
+            self.config.strategy_pause_exit_confirm_seconds
+            if self._pause_active_category == "STRATEGY_REGIME"
+            else 0.0,
+        )
         ready = (
             count >= self.config.pause_recovery_samples
-            and elapsed >= self.config.pause_recovery_seconds
+            and elapsed >= recovery_threshold
         )
         if ready:
             self._activate(evaluation.mode, timestamp_seconds)
@@ -462,14 +654,15 @@ class ModeSelector:
                 f"PAUSE recovery pending: {count}/{self.config.pause_recovery_samples} "
                 "safe observations",
             ]
-            if self.config.pause_recovery_seconds > 0:
+            if recovery_threshold > 0:
                 reasons.append(
-                    f"PAUSE recovery time {elapsed:.1f}/{self.config.pause_recovery_seconds:.1f}s"
+                    f"PAUSE recovery time {elapsed:.1f}/{recovery_threshold:.1f}s"
                 )
         return self._decision(
             state,
             previous_mode=previous_mode,
             reasons=reasons,
+            recovery_confirmation_seconds=recovery_threshold,
         )
 
     def _defensive_exit(
@@ -516,7 +709,23 @@ class ModeSelector:
     ) -> GridModeDecision:
         previous_mode = self._current_mode
         if evaluation.mode is GridMode.PAUSE:
-            return self._force_pause(state, list(evaluation.reasons), timestamp_seconds)
+            if (
+                self._current_mode is not None
+                and self._current_mode is not GridMode.PAUSE
+                and evaluation.pause_category == "STRATEGY_REGIME"
+                and self.config.strategy_pause_entry_confirm_seconds > 0
+            ):
+                return self._pending_strategy_pause(
+                    state, evaluation, timestamp_seconds
+                )
+            return self._force_pause(
+                state,
+                list(evaluation.reasons),
+                timestamp_seconds,
+                pause_category=evaluation.pause_category,
+            )
+
+        self._reset_pause_candidate()
 
         if self._current_mode is None:
             self._activate(GridMode.PAUSE, timestamp_seconds)
@@ -585,6 +794,7 @@ class ModeSelector:
             state,
             ["market state malformed; PAUSE required"],
             parse_timestamp(timestamp),
+            pause_category="DATA_CRITICAL",
         )
 
     def update(self, state: MarketState | Mapping[str, Any]) -> GridModeDecision:
@@ -605,6 +815,7 @@ class ModeSelector:
                 market_state,
                 ["market state timestamp unavailable"],
                 None,
+                pause_category="DATA_CRITICAL",
             )
         if (
             self._last_timestamp_seconds is not None
@@ -614,6 +825,7 @@ class ModeSelector:
                 market_state,
                 ["market state timestamp is not newer than selector history"],
                 timestamp_seconds,
+                pause_category="DATA_CRITICAL",
             )
         self._last_timestamp_seconds = timestamp_seconds
         evaluation = determine_candidate_mode(market_state, self.config)

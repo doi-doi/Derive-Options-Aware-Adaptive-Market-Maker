@@ -35,6 +35,33 @@ controller artifacts remain execution-disabled and mainnet trading remains rejec
 See the
 [Stage 9 dashboard guide](docs/dashboard.md) and [Stage 9 report](reports/stage9_condor_dashboard.md).
 
+Stage 12 adds the mainnet-shadow baseline gate. It measures the unchanged
+strategy against public Derive mainnet data with isolated conservative and
+touch-optimistic paper ledgers, verified accounting, timestamped exposure,
+order lifecycle/churn, future-data markouts, cycle recycling, deterministic
+health classification, and a live `SHADOW TRADING` dashboard. It never creates
+a private client or sends exchange mutations. The profile is disabled by
+default; Stage 12C observability and the real Stage 12D 60-minute smoke must
+remain complete before longer collection. See
+[the Stage 12 runbook](docs/STAGE12_MAINNET_SHADOW_BASELINE.md) and the
+[Stage 12D smoke report](reports/stage12d_mainnet_shadow_smoke.md).
+
+Stage 14 extends that boundary into a bounded, evidence-based economic shadow
+validation. It collects real Derive mainnet public data for up to six hours,
+keeps conservative trade-through fills separate from touch-optimistic
+sensitivity, freezes the validated Stage 13 configuration, and never enables a
+private trading client or exchange mutation. Start it explicitly with:
+
+```bash
+PYTHONPATH=src:. .venv/bin/python -m condor.stage14 \
+  --profile configs/shadow_competition_800_stage13.yml \
+  --duration 6h --interval 5 --trade-transport websocket
+```
+
+The run writes its session evidence under `reports/stage14/<session_id>/` and
+publishes the live summary to `reports/stage14/latest_summary.json`; the local
+dashboard exposes the same evidence under `SHADOW TRADING` on port 8502.
+
 ## The one-minute explanation
 
 The strategy combines four inputs:

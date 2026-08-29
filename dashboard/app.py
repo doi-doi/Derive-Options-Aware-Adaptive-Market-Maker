@@ -44,8 +44,15 @@ from dashboard.consequence_preview import (  # noqa: E402
 from dashboard.grid_preview import build_proposed_plan, compare_plans, plan_rows  # noqa: E402
 from dashboard.history import history_rows, rollback_diff  # noqa: E402
 from dashboard.portfolio_preview import portfolio_bars  # noqa: E402
+from dashboard.shadow_reader import read_shadow_state  # noqa: E402
 from dashboard.state_reader import JsonlTailReader, RuntimeSnapshot, read_runtime  # noqa: E402
 from derive_options_mm.environment import environment_profile  # noqa: E402
+from derive_options_mm.stage12c import (  # noqa: E402
+    REPLACEMENT_DEVIATION_BUCKETS,
+    RESTING_LIFETIME_BUCKETS,
+    replacement_deviation_bucket,
+    resting_lifetime_bucket,
+)
 from evaluation.self_tuning_observer import (  # noqa: E402
     UNKNOWN,
     ObserverConfig,
@@ -121,6 +128,54 @@ def _preview_value(value: Any) -> Any:
     return "UNKNOWN" if value is None else str(value)
 
 
+def _shadow_value_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Render heterogeneous diagnostic values as one Arrow-compatible column."""
+
+    return [{**row, "Value": _preview_value(row.get("Value"))} for row in rows]
+
+
+def _shadow_lifetime_buckets(
+    metrics: dict[str, Any], orders: tuple[dict[str, Any], ...]
+) -> dict[str, int]:
+    """Use persisted metrics, with a conservative-order fallback for older runs."""
+
+    stored = metrics.get("resting_lifetime_buckets")
+    if isinstance(stored, dict) and set(RESTING_LIFETIME_BUCKETS).issubset(stored):
+        return {bucket: int(stored.get(bucket, 0) or 0) for bucket in RESTING_LIFETIME_BUCKETS}
+    return {
+        bucket: sum(
+            resting_lifetime_bucket(row.get("resting_lifetime_seconds")) == bucket
+            for row in orders
+            if row.get("model") in {None, "CONSERVATIVE"}
+        )
+        for bucket in RESTING_LIFETIME_BUCKETS
+    }
+
+
+def _shadow_deviation_buckets(
+    metrics: dict[str, Any], cancels: tuple[dict[str, Any], ...]
+) -> dict[str, int]:
+    """Use persisted metrics, with a raw-cancel fallback for older runs."""
+
+    stored = metrics.get("replacement_deviation_buckets")
+    if isinstance(stored, dict) and set(REPLACEMENT_DEVIATION_BUCKETS).issubset(stored):
+        return {bucket: int(stored.get(bucket, 0) or 0) for bucket in REPLACEMENT_DEVIATION_BUCKETS}
+    return {
+        bucket: sum(
+            replacement_deviation_bucket(
+                row.get("price_deviation_bps")
+                if row.get("price_deviation_bps") is not None
+                else row.get("cancel_price_deviation_bps")
+            )
+            == bucket
+            for row in cancels
+            if row.get("model") in {None, "CONSERVATIVE"}
+            and row.get("category") not in {"SESSION_SHUTDOWN", "MANUAL_STOP"}
+        )
+        for bucket in REPLACEMENT_DEVIATION_BUCKETS
+    }
+
+
 def _age_text(age: float | None, stale_seconds: float = 15.0) -> str:
     if age is None:
         return "UNKNOWN"
@@ -175,9 +230,7 @@ def _render_header(
     )
 
 
-def _render_environment(
-    st: Any, saved: DashboardConfig, staged: DashboardConfig
-) -> None:
+def _render_environment(st: Any, saved: DashboardConfig, staged: DashboardConfig) -> None:
     """Expose the one shared Derive network selector without enabling trading."""
 
     st.header("ENVIRONMENT")
@@ -331,6 +384,897 @@ def _render_overview(st: Any, runtime: RuntimeSnapshot, saved: DashboardConfig) 
     _render_asset_cards(st, runtime, saved.competition)
     st.subheader("Orders / churn")
     _render_churn(st, runtime, saved.competition)
+
+
+def _render_shadow(st: Any, args: argparse.Namespace) -> None:
+    """Render the Stage 12 baseline without exposing any execution control."""
+
+    st.header("SHADOW TRADING")
+    st.error(
+        "DERIVE MAINNET DATA\nSHADOW EXECUTION\nPAPER FUNDS ONLY\nREAL EXCHANGE MUTATIONS: 0",
+        icon="🛡️",
+    )
+    data_dir = Path(args.data_dir).expanduser() if args.data_dir else PROJECT_ROOT / "data"
+    shadow = read_shadow_state(data_dir)
+    st.caption(f"Persisted state: {data_dir.resolve()}")
+    if not shadow.available:
+        st.info(
+            "No shadow session has been persisted yet. Start a bounded public-data session with "
+            "`PYTHONPATH=src:. python -m condor.shadow_baseline --duration 15m`."
+        )
+        return
+
+    metrics = shadow.metrics
+    summary_metrics = shadow.session.get("metrics", {})
+    if not metrics and isinstance(summary_metrics, dict):
+        metrics = summary_metrics
+    mutation_calls = metrics.get(
+        "real_exchange_mutation_calls",
+        shadow.session.get("real_exchange_mutation_calls", 0),
+    )
+    if mutation_calls:
+        st.error(f"SAFETY FAILURE — real exchange mutation calls recorded: {mutation_calls}")
+    else:
+        st.success("REAL EXCHANGE MUTATIONS: 0 — shadow mutation barrier intact")
+
+    status_rows = [
+        {"Field": "MODE", "Value": "MAINNET SHADOW"},
+        {"Field": "DATA", "Value": "REAL DERIVE MAINNET"},
+        {"Field": "EXECUTION", "Value": "SHADOW / PAPER"},
+        {"Field": "FUNDS", "Value": "PAPER ONLY"},
+        {
+            "Field": "ENVIRONMENT CONSISTENCY",
+            "Value": "SHADOW ENVIRONMENT CONSISTENCY: PASS",
+        },
+        {"Field": "Session", "Value": shadow.session.get("session_id", "UNKNOWN")},
+        {"Field": "Baseline config", "Value": metrics.get("baseline_config_version", "UNKNOWN")},
+        {"Field": "Config hash", "Value": metrics.get("config_hash", "UNKNOWN")},
+        {
+            "Field": "Config status",
+            "Value": "FROZEN" if metrics.get("config_frozen", True) else "CONTAMINATED",
+        },
+        {"Field": "Self-tuning", "Value": metrics.get("self_tuning_mode", "SUGGEST_ONLY")},
+        {"Field": "Fee model", "Value": metrics.get("fees_status", "UNKNOWN")},
+    ]
+    st.dataframe(status_rows, width="stretch", hide_index=True)
+
+    st.subheader("Baseline KPIs")
+    columns = st.columns(6)
+    columns[0].metric("SESSION", _fmt(metrics.get("session_duration_hours"), " h"))
+    columns[1].metric("PAPER EQUITY", _fmt(metrics.get("paper_equity"), " USDC"))
+    columns[2].metric("GROSS PAPER PNL", _fmt(metrics.get("gross_pnl"), " USDC"))
+    columns[3].metric(
+        "VERIFIED NET PNL",
+        _fmt(metrics.get("verified_net_pnl"), " USDC")
+        if metrics.get("verified_net_pnl_status") == "VERIFIED"
+        else "UNKNOWN",
+    )
+    columns[4].metric("REALIZED PNL", _fmt(metrics.get("realized_pnl"), " USDC"))
+    columns[5].metric("EXECUTED VOLUME", _fmt(metrics.get("total_executed_notional"), " USDC"))
+    columns = st.columns(6)
+    columns[0].metric("VOLUME / AVG RISK", _fmt(metrics.get("volume_per_average_deployed_risk")))
+    columns[1].metric("CYCLES", str(metrics.get("completed_cycles", "UNKNOWN")))
+    columns[2].metric(
+        "CYCLES / HOUR",
+        _fmt(
+            metrics.get("completed_cycles", 0) / metrics.get("session_duration_hours", 1)
+            if metrics.get("session_duration_hours")
+            else None
+        ),
+    )
+    columns[3].metric("FILL / CREATE", _fmt(metrics.get("fill_create_ratio")))
+    columns[4].metric("CANCEL / CREATE", _fmt(metrics.get("cancel_create_ratio")))
+    columns[5].metric("MAX DRAWDOWN", _fmt(metrics.get("max_drawdown_quote"), " USDC"))
+
+    st.subheader("PnL reconciliation")
+    reconciliation = metrics.get("pnl_reconciliation", {})
+    reconciliation_rows = [
+        {"Component": "Starting equity", "Value": reconciliation.get("starting_equity")},
+        {"Component": "+ Realized PnL", "Value": reconciliation.get("realized_pnl")},
+        {"Component": "+ Unrealized inventory PnL", "Value": reconciliation.get("unrealized_pnl")},
+        {"Component": "- Fees", "Value": reconciliation.get("fees")},
+        {"Component": "= Expected equity", "Value": reconciliation.get("expected_equity")},
+        {"Component": "Current equity", "Value": reconciliation.get("current_equity")},
+        {"Component": "Discrepancy", "Value": reconciliation.get("discrepancy")},
+        {"Component": "PNL RECONCILIATION", "Value": reconciliation.get("status", "FAIL")},
+    ]
+    st.dataframe(_shadow_value_rows(reconciliation_rows), width="stretch", hide_index=True)
+    if reconciliation.get("status") == "FAIL":
+        st.error("PNL RECONCILIATION: FAIL — discrepancy is shown above.")
+    elif reconciliation:
+        st.success("PNL RECONCILIATION: PASS")
+    if metrics.get("fees_status") == "UNKNOWN":
+        st.warning("FEE MODEL = UNKNOWN. PnL is gross/modelled; net PnL is not claimed.")
+    trade_evidence = metrics.get("public_trade_evidence", "UNAVAILABLE")
+    st.write(f"PUBLIC TRADE EVIDENCE: {trade_evidence}")
+    st.write(f"CONSERVATIVE FILLS: {metrics.get('conservative_fills_status', 'UNAVAILABLE')}")
+    if trade_evidence == "UNAVAILABLE":
+        st.warning(
+            "PUBLIC TRADE EVIDENCE: UNAVAILABLE — conservative trade-through fills remain "
+            "unavailable; touch results remain sensitivity-only."
+        )
+
+    st.subheader("Volume and order lifecycle")
+    volume_rows = [
+        {"Metric": "Session volume", "Value": metrics.get("session_volume")},
+        {"Metric": "Last hour volume", "Value": metrics.get("last_hour_volume")},
+        {"Metric": "Buy volume", "Value": metrics.get("buy_executed_notional")},
+        {"Metric": "Sell volume", "Value": metrics.get("sell_executed_notional")},
+        {"Metric": "Volume / starting equity", "Value": metrics.get("volume_per_starting_equity")},
+        {
+            "Metric": "Volume / average gross exposure",
+            "Value": metrics.get("volume_per_average_gross_exposure"),
+        },
+        {
+            "Metric": "Volume / average margin",
+            "Value": metrics.get("volume_per_average_margin_used"),
+        },
+        {"Metric": "Created", "Value": metrics.get("orders_created")},
+        {"Metric": "Resting", "Value": metrics.get("active_orders")},
+        {"Metric": "KEEP", "Value": metrics.get("orders_kept")},
+        {"Metric": "Filled", "Value": metrics.get("orders_filled")},
+        {"Metric": "Cancelled", "Value": metrics.get("orders_cancelled")},
+        {"Metric": "Replaced", "Value": metrics.get("orders_replaced")},
+        {"Metric": "Expired", "Value": metrics.get("orders_expired")},
+        {"Metric": "Rejected", "Value": metrics.get("orders_rejected")},
+        {"Metric": "TP active", "Value": metrics.get("tp_orders_created")},
+        {"Metric": "TP filled", "Value": metrics.get("tp_orders_filled")},
+    ]
+    st.dataframe(_shadow_value_rows(volume_rows), width="stretch", hide_index=True)
+    st.write("Volume by asset")
+    st.dataframe(
+        [
+            {"Asset": pair, "Volume": value}
+            for pair, value in (metrics.get("volume_by_asset") or {}).items()
+        ]
+        or [{"Asset": "NO FILLS YET", "Volume": None}],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.subheader("Stage 12C observability")
+    lifecycle_counts = (
+        metrics.get("lifecycle_states") or metrics.get("lifecycle_state_counts") or {}
+    )
+    coverage = metrics.get("trade_coverage") or {}
+    overall_coverage = coverage.get("overall") or {}
+    eligibility = metrics.get("fill_eligibility") or {}
+    st.dataframe(
+        _shadow_value_rows(
+            [
+                {"Metric": "Fee model", "Value": metrics.get("fees_status", "UNKNOWN")},
+                {
+                    "Metric": "Resting lifetime median (s)",
+                    "Value": metrics.get("median_quote_lifetime"),
+                },
+                {
+                    "Metric": "Resting lifetime p90 (s)",
+                    "Value": metrics.get("p90_quote_lifetime")
+                    or metrics.get("resting_lifetime_p90"),
+                },
+                {
+                    "Metric": "Never-rested excluded",
+                    "Value": metrics.get("resting_lifetime_excluded_never_rested"),
+                },
+                {"Metric": "Operational cancels", "Value": metrics.get("operational_cancels")},
+                {
+                    "Metric": "Shutdown/manual cancels",
+                    "Value": metrics.get("shutdown_cancels"),
+                },
+                {
+                    "Metric": "UNKNOWN_INTERNAL cancels",
+                    "Value": (metrics.get("cancel_reason_counts") or {}).get("UNKNOWN_INTERNAL", 0),
+                },
+                {"Metric": "Risk checks", "Value": metrics.get("risk_checks_total")},
+                {"Metric": "Raw risk blocks", "Value": metrics.get("risk_blocks_raw")},
+                {
+                    "Metric": "Unique risk episodes",
+                    "Value": metrics.get("unique_risk_episodes"),
+                },
+                {
+                    "Metric": "Blocked duration (s)",
+                    "Value": metrics.get("duration_blocked_seconds"),
+                },
+                {
+                    "Metric": "Public trade coverage",
+                    "Value": overall_coverage.get("coverage_pct"),
+                },
+                {
+                    "Metric": "Eligible order count",
+                    "Value": eligibility.get("eligible_order_count"),
+                },
+                {
+                    "Metric": "Missing evidence order count",
+                    "Value": eligibility.get("missing_order_count"),
+                },
+            ]
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Lifecycle states")
+    st.dataframe(
+        [{"State": state, "Count": count} for state, count in lifecycle_counts.items()]
+        or [{"State": "NO LIFECYCLE DATA", "Count": None}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Exact cancel taxonomy")
+    st.dataframe(
+        [
+            {"Reason": reason, "Count": count}
+            for reason, count in (metrics.get("cancel_reason_counts") or {}).items()
+        ]
+        or [{"Reason": "NO CANCEL DATA", "Count": None}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Risk episodes")
+    st.dataframe(
+        [
+            {
+                "Reason": row.get("reason"),
+                "Raw blocks": row.get("raw_blocks"),
+                "Unique episodes": row.get("unique_episodes"),
+                "Blocked seconds": row.get("blocked_seconds"),
+                "Assets": _preview_value(row.get("assets")),
+            }
+            for row in (metrics.get("risk_episode_summary") or [])
+        ]
+        or [{"Reason": "NO RISK EPISODES"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Public trade evidence coverage")
+    coverage_rows = []
+    if overall_coverage:
+        coverage_rows.append({"Asset": "OVERALL", **overall_coverage})
+    coverage_rows.extend(
+        {"Asset": pair, **values} for pair, values in (coverage.get("by_asset") or {}).items()
+    )
+    st.dataframe(
+        coverage_rows or [{"Asset": "NO TRADE EVIDENCE"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Fill eligibility attribution")
+    st.dataframe(
+        [
+            {"Status": status, "Count": count}
+            for status, count in (eligibility.get("counts") or {}).items()
+        ]
+        or [{"Status": "NO FILLS"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Reconciliation decisions")
+    st.dataframe(
+        [
+            {
+                "Timestamp": row.get("timestamp"),
+                "Pair": row.get("trading_pair"),
+                "Plan": row.get("plan_version"),
+                "Desired": row.get("desired_count"),
+                "Active": row.get("active_count"),
+                "Create": row.get("create_count"),
+                "Keep": row.get("keep_count"),
+                "Stop": row.get("stop_count"),
+                "Defer": row.get("deferred_count"),
+                "Risk": row.get("risk_block_count"),
+            }
+            for row in list(shadow.session.get("reconciliation_decisions", []))[-100:]
+        ]
+        or [
+            {
+                "Timestamp": row.get("timestamp"),
+                "Pair": row.get("trading_pair"),
+                "Plan": row.get("plan_version"),
+                "Desired": row.get("desired_count"),
+                "Active": row.get("active_count"),
+                "Create": row.get("create_count"),
+                "Keep": row.get("keep_count"),
+                "Stop": row.get("stop_count"),
+                "Defer": row.get("deferred_count"),
+                "Risk": row.get("risk_block_count"),
+            }
+            for row in list(metrics.get("reconciliation_decisions") or [])[-100:]
+        ]
+        or [{"Timestamp": "NO RECONCILIATION DATA"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Recent lifecycle events")
+    st.dataframe(
+        [
+            {
+                "Timestamp": row.get("timestamp"),
+                "Event": row.get("event"),
+                "Pair": row.get("trading_pair"),
+                "Level": row.get("level_id"),
+                "Order": row.get("shadow_order_id"),
+                "Reason": row.get("reason"),
+                "State": row.get("lifecycle_state"),
+            }
+            for row in list(shadow.lifecycle_events)[-200:]
+        ]
+        or [{"Event": "NO LIFECYCLE EVENTS"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Resting age distribution")
+    st.dataframe(
+        [
+            {"Bucket": bucket, "Orders": count}
+            for bucket, count in _shadow_lifetime_buckets(metrics, shadow.orders).items()
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Replacement-deviation distribution")
+    st.dataframe(
+        [
+            {"Bucket": bucket, "Operational cancels": count}
+            for bucket, count in _shadow_deviation_buckets(metrics, shadow.cancels).items()
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
+    stage13 = shadow.stage13 or metrics.get("stage13") or shadow.session.get("stage13") or {}
+    st.subheader("Stage 13 stability optimization")
+    if stage13:
+        stage13_safety = stage13.get("safety") or {}
+        stage13_readiness = stage13.get("readiness") or {}
+        stage13_validation = stage13.get("validation") or {}
+        stage13_reconciliation = stage13.get("create_decision_reconciliation") or {}
+        stage13_survival = stage13.get("quote_survival") or {}
+        stage13_survival_counts = stage13_survival.get("counts") or {}
+        stage13_pause = stage13.get("pause_hysteresis") or {}
+        stage13_risk = stage13.get("risk_reservation") or {}
+        stage13_risk_delta = stage13.get("risk_delta") or {}
+        stage13_comparison = {str(row.get("metric")): row for row in stage13.get("comparison", [])}
+        st.dataframe(
+            _shadow_value_rows(
+                [
+                    {"Metric": "Safety boundary", "Value": stage13_safety.get("status")},
+                    {
+                        "Metric": "Hard safety regression",
+                        "Value": stage13_validation.get("hard_safety_regression"),
+                    },
+                    {
+                        "Metric": "PnL reconciliation",
+                        "Value": stage13_validation.get("pnl_reconciliation"),
+                    },
+                    {"Metric": "Fill contract", "Value": stage13_validation.get("fill_contract")},
+                    {"Metric": "Trade pipeline", "Value": stage13_validation.get("trade_pipeline")},
+                    {
+                        "Metric": "Raw create decisions",
+                        "Value": stage13_reconciliation.get("raw_create_decisions"),
+                    },
+                    {
+                        "Metric": "Instantiated",
+                        "Value": stage13_reconciliation.get("instantiated"),
+                    },
+                    {
+                        "Metric": "Same-frame create/cancel",
+                        "Value": (stage13.get("same_frame_cancel") or {}).get("count"),
+                    },
+                    {
+                        "Metric": ">=1/5/30/60s quote survival",
+                        "Value": [
+                            stage13_survival_counts.get("stayed_resting_ge_1s"),
+                            stage13_survival_counts.get("stayed_resting_ge_5s"),
+                            stage13_survival_counts.get("stayed_resting_ge_30s"),
+                            stage13_survival_counts.get("stayed_resting_ge_60s"),
+                        ],
+                    },
+                    {"Metric": "KEEP decisions", "Value": stage13_risk_delta.get("keep_decisions")},
+                    {
+                        "Metric": "Median/P90 lifetime (s)",
+                        "Value": [
+                            stage13_comparison.get("median_resting_lifetime_seconds", {}).get(
+                                "stage13"
+                            ),
+                            stage13_comparison.get("p90_resting_lifetime_seconds", {}).get(
+                                "stage13"
+                            ),
+                        ],
+                    },
+                    {
+                        "Metric": "Pending reserved gross",
+                        "Value": stage13_risk.get("pending_reserved_gross"),
+                    },
+                    {
+                        "Metric": "Max incremental candidate risk",
+                        "Value": stage13_risk_delta.get("max_positive_candidate_delta"),
+                    },
+                    {
+                        "Metric": "Pending-risk oscillation count",
+                        "Value": stage13_risk.get("pending_risk_oscillation_count"),
+                    },
+                    {
+                        "Metric": "Pending-risk self-invalidation",
+                        "Value": stage13_risk.get("self_invalidation_events"),
+                    },
+                    {
+                        "Metric": "Stability readiness",
+                        "Value": stage13_readiness.get("stability_optimization"),
+                    },
+                    {
+                        "Metric": "Quote optimization",
+                        "Value": stage13_readiness.get("quote_optimization", "NO"),
+                    },
+                    {
+                        "Metric": "Fill optimization",
+                        "Value": stage13_readiness.get("fill_optimization", "NO"),
+                    },
+                    {
+                        "Metric": "Volume optimization",
+                        "Value": stage13_readiness.get("volume_optimization", "NO"),
+                    },
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        st.write("Stage 12G control vs Stage 13")
+        st.dataframe(
+            _shadow_value_rows(
+                [
+                    {
+                        "Metric": row.get("metric"),
+                        "Stage 12G control": row.get("stage12g_control"),
+                        "Stage 13": row.get("stage13"),
+                        "Delta": row.get("delta_stage13_minus_control"),
+                    }
+                    for row in stage13.get("comparison", [])
+                ]
+            )
+            or [{"Metric": "NO COMPARISON DATA"}],
+            width="stretch",
+            hide_index=True,
+        )
+        current_pause = stage13_pause.get("current") or {}
+        st.write("Current pause candidate")
+        st.dataframe(
+            _shadow_value_rows(
+                [
+                    {"Metric": "Pair", "Value": current_pause.get("trading_pair")},
+                    {"Metric": "Mode", "Value": current_pause.get("mode")},
+                    {
+                        "Metric": "Candidate",
+                        "Value": current_pause.get("pause_candidate_active"),
+                    },
+                    {
+                        "Metric": "Reason",
+                        "Value": current_pause.get("pause_candidate_category")
+                        or current_pause.get("pause_candidate_reason"),
+                    },
+                    {
+                        "Metric": "Candidate age (s)",
+                        "Value": current_pause.get("pause_candidate_age_seconds"),
+                    },
+                    {
+                        "Metric": "Confirmation threshold (s)",
+                        "Value": current_pause.get("pause_confirmation_seconds"),
+                    },
+                    {"Metric": "Confirmed pause", "Value": current_pause.get("pause_confirmed")},
+                    {
+                        "Metric": "Recovery candidate",
+                        "Value": current_pause.get("recovery_candidate"),
+                    },
+                    {
+                        "Metric": "Recovery age (s)",
+                        "Value": current_pause.get("recovery_candidate_age_seconds"),
+                    },
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        st.write("Asset execution status")
+        st.dataframe(
+            [
+                {
+                    "Pair": row.get("trading_pair"),
+                    "Status": row.get("status"),
+                    "Enabled in cycle": row.get("enabled_in_cycle"),
+                    "Mutations allowed": row.get("execution_mutations_allowed"),
+                }
+                for row in stage13.get("asset_execution_status", [])
+            ]
+            or [{"Pair": "NO STAGE 13 STATUS DATA"}],
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.info("No Stage 13 stability report has been persisted yet.")
+
+    stage14 = (
+        getattr(shadow, "stage14", {})
+        or metrics.get("stage14")
+        or shadow.session.get("stage14")
+        or {}
+    )
+    st.subheader("Stage 14 economic validation")
+    if stage14:
+        st.error(
+            "DERIVE MAINNET DATA\nSHADOW / PAPER EXECUTION\nCONFIG FROZEN\n"
+            "REAL EXCHANGE MUTATIONS: 0",
+            icon="🛡️",
+        )
+        stage14_evidence = stage14.get("evidence") or {}
+        stage14_fill = stage14.get("fill_quality") or {}
+        stage14_marks = stage14_fill.get("markouts") or {}
+        stage14_order = stage14.get("order_execution") or {}
+        stage14_capital = stage14.get("capital_recycling") or {}
+        stage14_volume = stage14.get("volume_risk") or {}
+        stage14_risk = stage14.get("risk") or {}
+        stage14_economics = stage14.get("economics") or {}
+        stage14_readiness = stage14.get("readiness") or {}
+
+        def _stage14_markout(horizon: str) -> str:
+            value = stage14_marks.get(horizon) or {}
+            return f"{_fmt(value.get('mean_bps'))} bps (n={value.get('sample_count', 'UNKNOWN')})"
+
+        elapsed_hours = _fmt(
+            (stage14.get("duration_seconds") or 0.0) / 3600.0,
+            " h",
+        )
+        stage14_duration_hours = stage14.get("duration_hours") or 0.0
+        cycles_per_hour = (
+            (stage14_capital.get("completed_cycles") or 0.0) / stage14_duration_hours
+            if stage14_duration_hours
+            else None
+        )
+        top = st.columns(6)
+        top[0].metric("ELAPSED", elapsed_hours)
+        top[1].metric("EVIDENCE", str(stage14_evidence.get("status", "UNKNOWN")))
+        top[2].metric("CONSERVATIVE FILLS", str(stage14_fill.get("conservative_fills", "UNKNOWN")))
+        top[3].metric("30s MARKOUT", _stage14_markout("30s"))
+        top[4].metric("60s MARKOUT", _stage14_markout("60s"))
+        top[5].metric("COMPLETED CYCLES", str(stage14_capital.get("completed_cycles", "UNKNOWN")))
+        top = st.columns(6)
+        top[0].metric("CYCLES / HOUR", _fmt(cycles_per_hour))
+        top[1].metric("EXECUTED VOLUME", _fmt(stage14_volume.get("executed_volume"), " USDC"))
+        top[2].metric(
+            "VOLUME / AVG RISK",
+            _fmt((stage14_volume.get("ratios") or {}).get("volume_per_average_filled_gross")),
+        )
+        top[3].metric("AVERAGE INVENTORY", _fmt(stage14_volume.get("average_inventory")))
+        top[4].metric("MAX INVENTORY", _fmt(stage14_volume.get("max_inventory")))
+        top[5].metric("GROSS PAPER PNL", _fmt(stage14_economics.get("gross_total_pnl"), " USDC"))
+
+        st.dataframe(
+            _shadow_value_rows(
+                [
+                    {"Metric": "Classification", "Value": stage14.get("classification")},
+                    {"Metric": "Primary weakness", "Value": stage14.get("primary_weakness")},
+                    {
+                        "Metric": "Ready for bounded economic optimization",
+                        "Value": stage14_readiness.get(
+                            "ready_for_bounded_economic_optimization", "NO"
+                        ),
+                    },
+                    {
+                        "Metric": "Ready for tiny live-money canary review",
+                        "Value": stage14_readiness.get(
+                            "ready_for_tiny_live_money_canary_review", "NO"
+                        ),
+                    },
+                    {
+                        "Metric": "Why stopped",
+                        "Value": stage14.get("why_stopped", "IN PROGRESS"),
+                    },
+                    {
+                        "Metric": "Config / Stage 13 behavior hash",
+                        "Value": [
+                            stage14.get("config_hash"),
+                            stage14.get("stage13_behavior_hash"),
+                        ],
+                    },
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        st.write("Stage 14 fill quality")
+        st.dataframe(
+            _shadow_value_rows(
+                [
+                    {
+                        "Metric": "Conservative fills",
+                        "Value": stage14_fill.get("conservative_fills"),
+                    },
+                    {
+                        "Metric": "Conservative volume",
+                        "Value": stage14_fill.get("conservative_volume"),
+                    },
+                    {"Metric": "Touch-optimistic fills", "Value": stage14_fill.get("touch_fills")},
+                    {
+                        "Metric": "Touch-optimistic volume",
+                        "Value": stage14_fill.get("touch_volume"),
+                    },
+                    {"Metric": "Fill-model sensitivity", "Value": stage14_fill.get("sensitivity")},
+                    {"Metric": "Adverse selection", "Value": stage14_fill.get("adverse_selection")},
+                    {"Metric": "5s markout", "Value": _stage14_markout("5s")},
+                    {"Metric": "30s markout", "Value": _stage14_markout("30s")},
+                    {"Metric": "60s markout", "Value": _stage14_markout("60s")},
+                    {"Metric": "5m markout", "Value": _stage14_markout("300s")},
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        st.write("Stage 14 capital recycling")
+        st.dataframe(
+            _shadow_value_rows(
+                [
+                    {
+                        "Metric": "Open positions",
+                        "Value": stage14_capital.get("open_position_count"),
+                    },
+                    {
+                        "Metric": "Average open inventory age (s)",
+                        "Value": stage14_capital.get("average_open_position_age_seconds"),
+                    },
+                    {
+                        "Metric": "Oldest inventory (s)",
+                        "Value": stage14_capital.get("max_open_position_age_seconds"),
+                    },
+                    {
+                        "Metric": "Completed cycles",
+                        "Value": stage14_capital.get("completed_cycles"),
+                    },
+                    {
+                        "Metric": "Median cycle duration (s)",
+                        "Value": stage14_capital.get("median_cycle_duration_seconds"),
+                    },
+                    {
+                        "Metric": "Closed within 15m / 30m / 1h",
+                        "Value": [
+                            stage14_capital.get("percentage_inventory_closed_within_15m"),
+                            stage14_capital.get("percentage_inventory_closed_within_30m"),
+                            stage14_capital.get("percentage_inventory_closed_within_1h"),
+                        ],
+                    },
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        st.write("Stage 14 execution and risk")
+        st.dataframe(
+            _shadow_value_rows(
+                [
+                    {
+                        "Metric": "Raw candidate evaluations",
+                        "Value": stage14_order.get("raw_candidate_evaluations"),
+                    },
+                    {
+                        "Metric": "Actual instantiated",
+                        "Value": stage14_order.get("actual_instantiated_orders"),
+                    },
+                    {"Metric": "Entered resting", "Value": stage14_order.get("entered_resting")},
+                    {"Metric": "KEEP", "Value": stage14_order.get("keep")},
+                    {
+                        "Metric": "Operational cancels",
+                        "Value": stage14_order.get("operational_cancels"),
+                    },
+                    {"Metric": "Fill/Create", "Value": stage14_order.get("fill_create_ratio")},
+                    {"Metric": "Cancel/Create", "Value": stage14_order.get("cancel_create_ratio")},
+                    {
+                        "Metric": "Median resting lifetime (s)",
+                        "Value": (stage14_order.get("quote_lifetime") or {}).get("median"),
+                    },
+                    {"Metric": "Filled gross", "Value": stage14_volume.get("average_filled_gross")},
+                    {
+                        "Metric": "Pending reserved gross",
+                        "Value": stage14_volume.get("average_pending_reserved_gross"),
+                    },
+                    {
+                        "Metric": "Worst-case gross",
+                        "Value": stage14_volume.get("average_worst_case_gross"),
+                    },
+                    {"Metric": "Average BTC-beta", "Value": stage14_volume.get("average_btc_beta")},
+                    {"Metric": "Max BTC-beta", "Value": stage14_volume.get("max_btc_beta")},
+                    {"Metric": "Risk blocks", "Value": stage14_risk.get("risk_blocks")},
+                    {
+                        "Metric": "Hard-limit attempts",
+                        "Value": stage14_risk.get("hard_limit_attempts"),
+                    },
+                    {
+                        "Metric": "PnL reconciliation",
+                        "Value": stage14_economics.get("pnl_reconciliation_status"),
+                    },
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        st.caption(
+            f"Stage 14 artifacts: {stage14.get('stage14_report_root', 'reports/stage14/UNKNOWN')}"
+        )
+    else:
+        st.info("No Stage 14 economic validation checkpoint has been persisted yet.")
+
+    st.subheader("Churn and markout")
+    churn_markout_rows = [
+        {"Metric": "Cancel/Create", "Value": metrics.get("cancel_create_ratio")},
+        {"Metric": "Cancels/hour", "Value": metrics.get("cancels_per_hour")},
+        {"Metric": "Median quote lifetime (s)", "Value": metrics.get("median_quote_lifetime")},
+        {
+            "Metric": "P25/P75/P90 lifetime (s)",
+            "Value": [
+                metrics.get("p25_quote_lifetime"),
+                metrics.get("p75_quote_lifetime"),
+                metrics.get("p90_quote_lifetime"),
+            ],
+        },
+        {
+            "Metric": "Median cancellation age (s)",
+            "Value": metrics.get("median_cancellation_age_seconds"),
+        },
+        {
+            "Metric": "Median cancellation deviation (bps)",
+            "Value": metrics.get("median_cancellation_deviation_bps"),
+        },
+        {"Metric": "Dominant cancel reason", "Value": metrics.get("dominant_cancel_reason")},
+        {"Metric": "KEEP %", "Value": metrics.get("keep_pct")},
+        {
+            "Metric": "HIGH_CANCEL_CHURN",
+            "Value": "YES" if metrics.get("high_cancel_churn") else "NO",
+        },
+        {"Metric": "5s markout (bps)", "Value": metrics.get("markout_5s")},
+        {"Metric": "30s markout (bps)", "Value": metrics.get("markout_30s")},
+        {"Metric": "60s markout (bps)", "Value": metrics.get("markout_60s")},
+        {"Metric": "Adverse selection", "Value": metrics.get("adverse_selection")},
+    ]
+    st.dataframe(_shadow_value_rows(churn_markout_rows), width="stretch", hide_index=True)
+    st.write("Markout samples")
+    st.dataframe(
+        [
+            {"Horizon": horizon, **values}
+            for horizon, values in (metrics.get("markout") or {}).items()
+        ]
+        or [{"Horizon": "NO FILLS YET"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.write("Per-asset markout samples")
+    st.dataframe(
+        [
+            {"Asset": pair, "Markout": values}
+            for pair, values in (metrics.get("markout_by_asset") or {}).items()
+        ]
+        or [{"Asset": "NO MARKOUTS YET", "Markout": None}],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.subheader("Inventory and portfolio risk")
+    st.dataframe(
+        [
+            {"Asset": pair, **values}
+            for pair, values in (metrics.get("inventory_by_asset") or {}).items()
+        ]
+        or [{"Asset": "NO INVENTORY YET"}],
+        width="stretch",
+        hide_index=True,
+    )
+    portfolio_rows = [
+        {"Metric": "Average gross", "Value": metrics.get("average_gross_exposure")},
+        {"Metric": "Max gross", "Value": metrics.get("max_gross_exposure")},
+        {"Metric": "Average net", "Value": metrics.get("average_net_exposure")},
+        {"Metric": "Average BTC-beta", "Value": metrics.get("average_btc_beta_exposure")},
+        {"Metric": "Max BTC-beta", "Value": metrics.get("max_btc_beta_exposure")},
+        {"Metric": "Long beta", "Value": metrics.get("average_long_beta_exposure")},
+        {"Metric": "Short beta", "Value": metrics.get("average_short_beta_exposure")},
+        {"Metric": "Average margin used", "Value": metrics.get("average_margin_used")},
+        {
+            "Metric": "Open inventory time (%)",
+            "Value": metrics.get("capital_recycling", {}).get(
+                "percentage_session_with_open_inventory"
+            ),
+        },
+        {"Metric": "Risk blocks", "Value": metrics.get("risk_blocks")},
+    ]
+    st.dataframe(_shadow_value_rows(portfolio_rows), width="stretch", hide_index=True)
+
+    st.subheader("Conservative vs touch-optimistic")
+    st.dataframe(
+        metrics.get("fill_model_comparison") or [{"Metric": "NO OBSERVATIONS YET"}],
+        width="stretch",
+        hide_index=True,
+    )
+    sensitivity = metrics.get("fill_model_sensitivity", "UNKNOWN")
+    (st.error if sensitivity == "HIGH" else st.warning if sensitivity == "MEDIUM" else st.info)(
+        f"FILL-MODE SENSITIVITY: {sensitivity}. Touch results are sensitivity evidence only."
+    )
+
+    st.subheader("Cycles and capital recycling")
+    st.dataframe(
+        _shadow_value_rows(
+            [
+                {"Metric": "Completed cycles", "Value": metrics.get("completed_cycles")},
+                {"Metric": "Cycles / hour", "Value": metrics.get("cycles_per_hour")},
+                {
+                    "Metric": "Median cycle duration (s)",
+                    "Value": metrics.get("median_cycle_duration"),
+                },
+                {
+                    "Metric": "Capture / cycle",
+                    "Value": metrics.get("realized_capture_per_cycle"),
+                },
+                {
+                    "Metric": "Median open-position age (s)",
+                    "Value": metrics.get("capital_recycling", {}).get(
+                        "median_open_position_age_seconds"
+                    ),
+                },
+                {
+                    "Metric": "Capital recycling",
+                    "Value": (
+                        "OBSERVED" if metrics.get("completed_cycles", 0) > 0 else "INSUFFICIENT"
+                    ),
+                },
+                {
+                    "Metric": "Configured levels / side",
+                    "Value": metrics.get("configured_levels_per_side"),
+                },
+                {"Metric": "Capital allocation", "Value": metrics.get("capital_allocation")},
+            ]
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.subheader("Baseline health and readiness")
+    st.dataframe(
+        [
+            {"Check": key, "Status": value}
+            for key, value in (metrics.get("health_checks") or {}).items()
+        ]
+        or [{"Check": "NO CHECKPOINT YET", "Status": "UNKNOWN"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.metric("FINAL STATUS", str(metrics.get("classification", "UNKNOWN")))
+    st.metric("READINESS", str(metrics.get("readiness", "NOT READY FOR OPTIMIZATION")))
+    if metrics.get("self_tuning_suggestions"):
+        st.subheader("Self-tuning suggestions (not applied)")
+        st.dataframe(metrics["self_tuning_suggestions"], width="stretch", hide_index=True)
+
+    st.subheader("Virtual order lifecycle")
+    st.dataframe(
+        list(shadow.orders)[:100] or [{"Status": "NO ORDERS YET"}],
+        width="stretch",
+        hide_index=True,
+    )
+    st.subheader("Virtual fills and paper equity")
+    st.dataframe(
+        list(shadow.fills)[:100] or [{"Status": "NO FILLS YET"}],
+        width="stretch",
+        hide_index=True,
+    )
+    equity_rows = [
+        {
+            "timestamp": row.get("timestamp"),
+            "current_equity": row.get("current_equity"),
+        }
+        for row in shadow.equity
+        if row.get("current_equity") is not None
+    ]
+    if equity_rows:
+        st.line_chart(
+            equity_rows,
+            x="timestamp",
+            y="current_equity",
+        )
+    st.caption(
+        "Shadow fills are modelled from future public evidence only. They are not Derive fills, "
+        "not live PnL, and do not prove queue position or profitability."
+    )
 
 
 def _render_churn(st: Any, runtime: RuntimeSnapshot, profile: Any) -> None:
@@ -1209,8 +2153,7 @@ def _render_advanced(
     st.write(f"Competition profile: `{store.profile_path}`")
     st.write(f"Strategy overlay: `{store.strategy_path}`")
     st.write(
-        "Generated Hummingbot controller profile: "
-        f"`{store.controller_path or 'not configured'}`"
+        f"Generated Hummingbot controller profile: `{store.controller_path or 'not configured'}`"
     )
     st.write(
         "Runtime reload: RESTART REQUIRED — the current Condor monitor constructs "
@@ -1394,6 +2337,7 @@ def main() -> None:
         "Page",
         [
             "OVERVIEW",
+            "SHADOW TRADING",
             "ENVIRONMENT",
             "SELF-TUNING",
             "STRATEGY",
@@ -1407,6 +2351,8 @@ def main() -> None:
     )
     if page == "OVERVIEW":
         _render_overview(st, runtime, staged)
+    elif page == "SHADOW TRADING":
+        _render_shadow(st, args)
     elif page == "ENVIRONMENT":
         _render_environment(st, saved, staged)
     elif page == "SELF-TUNING":

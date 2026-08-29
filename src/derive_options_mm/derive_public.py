@@ -15,6 +15,7 @@ from typing import Any
 ALLOWED_PUBLIC_METHODS = frozenset(
     {
         "public/get_all_instruments",
+        "public/get_instruments",
         "public/get_funding_rate_history",
         "public/get_index_chart_data",
         "public/get_interest_rate_history",
@@ -24,6 +25,8 @@ ALLOWED_PUBLIC_METHODS = frozenset(
         "public/get_spot_feed_history",
         "public/get_spot_feed_history_candles",
         "public/get_trade_history",
+        "public/get_tickers",
+        "public/get_time",
         "public/get_tradingview_chart_data",
     }
 )

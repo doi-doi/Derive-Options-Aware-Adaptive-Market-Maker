@@ -1,0 +1,72 @@
+# Stage 13 bounded market-making stability profile.
+#
+# This is a separate opt-in profile. It uses real Derive mainnet public data
+# and virtual SHADOW orders only. It must never be changed into live
+# execution by the runner.
+shadow:
+  enabled: false
+  execution_mode: SHADOW
+  execution_backend: SHADOW
+  market_environment: mainnet
+  execution_enabled: false
+  allow_mainnet_trading: false
+  starting_equity_usdc: 800
+  markets:
+    - BTC-USDC
+    - ETH-USDC
+    - SOL-USDC
+    - HYPE-USDC
+  enabled_markets:
+    - BTC-USDC
+    - ETH-USDC
+    - SOL-USDC
+    - HYPE-USDC
+  fill_model: conservative_trade_through
+  fee_model: unknown
+  persistence: true
+  dashboard_refresh_seconds: 3
+  session_duration_seconds: 172800
+  order_scale: 1
+  execution_max_levels_per_side: 1
+  minimum_order_lifetime_seconds: 120
+  minimum_replace_interval_seconds: 60
+  maximum_order_lifetime_seconds: 900
+  refresh_price_tolerance_bps: 12
+  refresh_amount_tolerance_pct: 0.15
+  collateral_safety_buffer_pct: 0.20
+  leverage: 1
+  post_only: true
+  baseline_config_version: stage13-bounded-maker-stability-v1
+  self_tuning_mode: SUGGEST_ONLY
+  checkpoint_interval_seconds: 300
+  market_data_stale_seconds: 15
+  pnl_reconciliation_tolerance: 0.000001
+  minimum_fill_samples: 5
+  minimum_markout_samples: 5
+  minimum_cycle_samples: 3
+  minimum_data_coverage_pct: 95
+  high_cancel_churn_min_creates: 5
+  high_cancel_churn_ratio: 2
+  high_cancel_churn_lifetime_seconds: 30
+  touch_sensitivity_medium_pct: 25
+  touch_sensitivity_high_pct: 100
+  inventory_soft_threshold_ratio: 0.50
+  inventory_defensive_threshold_ratio: 0.75
+  inventory_hard_threshold_ratio: 1.00
+  strategy_profile: configs/competition_800_usdc.yml
+  event_path: data/stage13_shadow_execution_events.jsonl
+  sqlite_path: data/stage13_shadow_execution.sqlite3
+  report_root: reports/shadow_baseline
+  stage13:
+    enabled: true
+    regime_pause_entry_confirm_seconds: 10
+    regime_pause_exit_confirm_seconds: 10
+    preserve_existing_quotes_during_soft_pause_confirmation: true
+    suppress_new_entries_during_soft_pause_confirmation: true
+    use_incremental_pending_exposure_for_reconciliation: true
+    asset_execution_status:
+      BTC-USDC: SIGNAL_ONLY
+      ETH-USDC: SIGNAL_ONLY_MIN_SIZE
+      SOL-USDC: EXECUTION_ENABLED
+      HYPE-USDC: EXECUTION_ENABLED
+    parent_control_summary_path: reports/stage13/parent_stage12g_summary.json

@@ -67,6 +67,15 @@ class GridPlanView:
     total_grid_width_pct: Decimal
     buy_levels: tuple[PlanLevel, ...]
     sell_levels: tuple[PlanLevel, ...]
+    pause_candidate_active: bool = False
+    pause_candidate_reason: str | None = None
+    pause_candidate_category: str | None = None
+    pause_candidate_age_seconds: float | None = None
+    pause_confirmation_seconds: float = 0.0
+    pause_confirmed: bool = False
+    recovery_candidate: str | None = None
+    recovery_candidate_age_seconds: float | None = None
+    recovery_confirmation_seconds: float = 0.0
 
     @property
     def levels(self) -> tuple[PlanLevel, ...]:
@@ -128,6 +137,7 @@ class RuntimeHealth:
     trading_rules: TradingRuleView | None = None
     reason: str = ""
     environment: str = "testnet"
+    execution_mode: str = "TESTNET"
     environment_verified: bool = False
     environment_consistent: bool = True
     mainnet_canary_authorized: bool = False
@@ -135,12 +145,13 @@ class RuntimeHealth:
     @property
     def ready_for_new_entries(self) -> bool:
         environment = environment_profile(self.environment)
-        environment_ready = (
-            self.testnet_verified
-            if not environment.is_mainnet
-            else self.environment_verified
+        environment_ready = self.testnet_verified if not environment.is_mainnet else (
+            self.environment_verified
             and self.environment_consistent
-            and self.mainnet_canary_authorized
+            and (
+                self.execution_mode.upper() == "SHADOW"
+                or self.mainnet_canary_authorized
+            )
         )
         return all(
             (
@@ -190,9 +201,12 @@ class ExecutionPolicy:
     time_limit_seconds: int | None = None
     forced_pause_reason: str = ""
     environment: str = "testnet"
+    execution_mode: str = "TESTNET"
     mainnet_canary_authorized: bool = False
     mainnet_canary_max_order_notional: Decimal | None = None
     mainnet_canary_max_loss_quote: Decimal | None = None
+    preserve_existing_quotes_during_soft_pause_confirmation: bool = False
+    suppress_new_entries_during_soft_pause_confirmation: bool = True
 
     def __post_init__(self) -> None:
         if self.execution_max_levels_per_side < 1:
@@ -272,6 +286,7 @@ class BlockedLevel:
     reason: str
     side: ExecutionSide | None = None
     quote_amount: Decimal = ZERO
+    reason_code: str = ""
 
 
 @dataclass
@@ -292,6 +307,7 @@ class ReconciliationResult:
     testnet_verified: bool = False
     keep_reasons: dict[str, str] = field(default_factory=dict)
     replacement_reason_counts: dict[str, int] = field(default_factory=dict)
+    desired_levels: list[DesiredLevel] = field(default_factory=list)
 
     @property
     def paused(self) -> bool:
@@ -373,6 +389,33 @@ def parse_grid_plan(record: Mapping[str, Any], expected_pair: str = "BTC-USDC") 
         total_grid_width_pct=_decimal(record.get("total_grid_width_pct")) or ZERO,
         buy_levels=_parse_levels(record.get("buy_levels"), ExecutionSide.BUY),
         sell_levels=_parse_levels(record.get("sell_levels"), ExecutionSide.SELL),
+        pause_candidate_active=bool(record.get("pause_candidate_active", False)),
+        pause_candidate_reason=(
+            str(record["pause_candidate_reason"])
+            if record.get("pause_candidate_reason") is not None
+            else None
+        ),
+        pause_candidate_category=(
+            str(record["pause_candidate_category"])
+            if record.get("pause_candidate_category") is not None
+            else None
+        ),
+        pause_candidate_age_seconds=_decimal(record.get("pause_candidate_age_seconds"))
+        if _decimal(record.get("pause_candidate_age_seconds")) is not None
+        else None,
+        pause_confirmation_seconds=float(record.get("pause_confirmation_seconds", 0.0) or 0.0),
+        pause_confirmed=bool(record.get("pause_confirmed", False)),
+        recovery_candidate=(
+            str(record["recovery_candidate"])
+            if record.get("recovery_candidate") is not None
+            else None
+        ),
+        recovery_candidate_age_seconds=_decimal(record.get("recovery_candidate_age_seconds"))
+        if _decimal(record.get("recovery_candidate_age_seconds")) is not None
+        else None,
+        recovery_confirmation_seconds=float(
+            record.get("recovery_confirmation_seconds", 0.0) or 0.0
+        ),
     )
 
 
@@ -530,7 +573,10 @@ def _pause_reason(
         return "GridPlan PAUSE", age
     if policy.forced_pause_reason:
         return policy.forced_pause_reason, age
-    if environment_profile(policy.environment).is_mainnet:
+    if (
+        environment_profile(policy.environment).is_mainnet
+        and policy.execution_mode.upper() != "SHADOW"
+    ):
         if policy.mainnet_canary_max_loss_quote is None:
             return "mainnet canary loss budget is not configured", age
         if policy.stop_loss_pct is None or policy.stop_loss_pct <= ZERO:
@@ -555,6 +601,7 @@ def reconcile_grid_plan(
     now_epoch: float,
     quantize_price: Callable[[Decimal], Decimal] | None = None,
     quantize_amount: Callable[[Decimal], Decimal] | None = None,
+    final_create_gate: Callable[[DesiredLevel], tuple[bool, str, str] | bool] | None = None,
 ) -> ReconciliationResult:
     """Return deterministic stop/keep/create intents for one controller tick."""
 
@@ -582,6 +629,13 @@ def reconcile_grid_plan(
     current_short = max(ZERO, -health.position_notional)
     result.potential_long_exposure = current_long + result.pending_buy_notional
     result.potential_short_exposure = current_short + result.pending_sell_notional
+
+    soft_pause_pending = bool(
+        plan is not None
+        and plan.pause_candidate_active
+        and not plan.pause_confirmed
+        and plan.pause_candidate_category == "STRATEGY_REGIME"
+    )
 
     unfilled_by_level: dict[str, ActiveLevel] = {}
     for item in active:
@@ -664,8 +718,23 @@ def reconcile_grid_plan(
                 desired_levels.append(desired)
 
     desired_by_level = {item.level_id: item for item in desired_levels}
+    result.desired_levels = list(desired_levels)
     for item in unfilled_by_level.values():
         desired = desired_by_level.get(item.level_id)
+        if soft_pause_pending and policy.preserve_existing_quotes_during_soft_pause_confirmation:
+            crossing = (
+                item.side is ExecutionSide.BUY
+                and health.best_ask is not None
+                and item.price >= health.best_ask
+            ) or (
+                item.side is ExecutionSide.SELL
+                and health.best_bid is not None
+                and item.price <= health.best_bid
+            )
+            if not crossing:
+                result.keeps.append(item.level_id)
+                result.keep_reasons[item.level_id] = "SOFT_PAUSE_CONFIRMATION_PRESERVE"
+                continue
         if desired is None:
             stop_unfilled(item, "level no longer desired")
             continue
@@ -808,9 +877,13 @@ def reconcile_grid_plan(
                 )
             )
             continue
-        if environment_profile(policy.environment).is_mainnet and (
-            policy.mainnet_canary_max_order_notional is None
-            or desired.quote_notional > policy.mainnet_canary_max_order_notional
+        if (
+            environment_profile(policy.environment).is_mainnet
+            and policy.execution_mode.upper() != "SHADOW"
+            and (
+                policy.mainnet_canary_max_order_notional is None
+                or desired.quote_notional > policy.mainnet_canary_max_order_notional
+            )
         ):
             result.blocked.append(
                 BlockedLevel(
@@ -821,6 +894,36 @@ def reconcile_grid_plan(
                 )
             )
             continue
+        if soft_pause_pending and policy.suppress_new_entries_during_soft_pause_confirmation:
+            result.blocked.append(
+                BlockedLevel(
+                    desired.level_id,
+                    "strategy-regime pause confirmation pending",
+                    desired.side,
+                    desired.quote_amount,
+                    "STRATEGY_REGIME_PAUSE_PENDING",
+                )
+            )
+            continue
+        if final_create_gate is not None:
+            gate_result = final_create_gate(desired)
+            if isinstance(gate_result, tuple):
+                allowed, reason_code, gate_reason = gate_result
+            else:
+                allowed = bool(gate_result)
+                reason_code = "PRE_CREATE_GATE" if not allowed else ""
+                gate_reason = "final pre-create eligibility gate blocked level"
+            if not allowed:
+                result.blocked.append(
+                    BlockedLevel(
+                        desired.level_id,
+                        gate_reason or "final pre-create eligibility gate blocked level",
+                        desired.side,
+                        desired.quote_amount,
+                        reason_code or "PRE_CREATE_GATE",
+                    )
+                )
+                continue
         result.creates.append(desired)
         slots -= 1
         if desired.side is ExecutionSide.BUY:
